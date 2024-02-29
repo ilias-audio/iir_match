@@ -61,6 +61,13 @@ def frequency_denormalize(f):
   f = log_denormalize(f, min, max)
   return f
 
+def frequency_normalize(f):
+  min = torch.tensor(20.0)
+  max = torch.tensor(20000.0)
+
+  f = log_normalize(f, min, max)
+  return f
+
 def gain_denormalize(g):
   min = torch.tensor(-12.0)
   max = torch.tensor(12.0)
@@ -71,6 +78,14 @@ def gain_denormalize(g):
 
   return g
 
+def gain_normalize(g):
+  min = torch.tensor(-12.0)
+  max = torch.tensor(12.0)
+
+  g = lin_normalize(g, min, max)
+
+  return g
+
 def q_denormalize(q):
 
   min = torch.tensor(0.01)
@@ -78,32 +93,52 @@ def q_denormalize(q):
 
   return log_denormalize(q, min, max)
 
+def q_normalize(q):
+
+  min = torch.tensor(0.01)
+  max = torch.tensor(4.0)
+
+  return log_normalize(q, min, max)
+
 # set the range of frequencies that we evaluate over
-f = torch.linspace(20, 20000, 4000)
+f = torch.linspace(20, 20000, 2000)
 
-target_F1 = frequency_denormalize(torch.rand(1))
-target_G1 = gain_denormalize(torch.rand(1))
-target_Q1 = q_denormalize(torch.rand(1))
+# target_F1 = frequency_denormalize(torch.rand(1))
+# target_G1 = gain_denormalize(torch.rand(1))
+# target_Q1 = q_denormalize(torch.rand(1))
 
-target_F2 = frequency_denormalize(torch.rand(1))
-target_G2 = gain_denormalize(torch.rand(1))
-target_Q2 = q_denormalize(torch.rand(1))
+# target_F2 = frequency_denormalize(torch.rand(1))
+# target_G2 = gain_denormalize(torch.rand(1))
+# target_Q2 = q_denormalize(torch.rand(1))
+
+target_F1 = (torch.tensor(1000.0))
+target_G1 = (torch.tensor(10.0**(3.0/40)))
+target_Q1 = (torch.tensor(1.0))
+
+target_F2 = (torch.tensor(5000.0))
+target_G2 = (torch.tensor(10.0**(6.0/40)))
+target_Q2 = (torch.tensor(0.5))
 
 target_response = evaluate_mag_response(f, target_F1, target_G1, target_Q1, target_F2, target_G2, target_Q2)
 
 print(target_response.max())
 
-n_iters = 1000
+n_iters = 5000
 
-F1 = torch.nn.Parameter(torch.tensor(.1))
-G1 = torch.nn.Parameter(torch.tensor(.9))
-Q1 = torch.nn.Parameter(torch.tensor(.0))
+parameters = torch.nn.ParameterList()
 
-F2 = torch.nn.Parameter(torch.tensor(0.9))
-G2 = torch.nn.Parameter(torch.tensor(0.9))
-Q2 = torch.nn.Parameter(torch.tensor(0.0))
+parameters.append(torch.tensor([0.1, .9, .0]))
+parameters.append(torch.tensor([0.9, .9, .0]))
 
-optimizer = torch.optim.Adam([F1, G1, Q1, F2, G2, Q2], lr=0.1)
+# F1 = torch.nn.Parameter(torch.tensor(.1))
+# G1 = torch.nn.Parameter(torch.tensor(.9))
+# Q1 = torch.nn.Parameter(torch.tensor(.0))
+
+# F2 = torch.nn.Parameter(torch.tensor(0.9))
+# G2 = torch.nn.Parameter(torch.tensor(0.9))
+# Q2 = torch.nn.Parameter(torch.tensor(0.0))
+
+optimizer = torch.optim.Adam(parameters, lr=0.1)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, n_iters)
 
 print("TARGET")
@@ -123,12 +158,12 @@ for n in pbar:
   #pred_response = evaluate_mag_response(f, frequency_denormalize(F1), gain_denormalize(G1), q_denormalise(Q1), frequency_denormalize(F2), gain_denormalize(G2),  q_denormalise(Q2))
   pred_response = evaluate_mag_response(
       f,
-      frequency_denormalize(torch.sigmoid(F1)),
-      gain_denormalize(torch.sigmoid(G1)),
-      q_denormalize(torch.sigmoid(Q1)),
-      frequency_denormalize(torch.sigmoid(F2)),
-      gain_denormalize(torch.sigmoid(G2)),
-      q_denormalize(torch.sigmoid(Q2))
+      frequency_denormalize(torch.sigmoid(parameters[0][0])),
+      gain_denormalize(torch.sigmoid(parameters[0][1])),
+      q_denormalize(torch.sigmoid(parameters[0][2])),
+      frequency_denormalize(torch.sigmoid(parameters[1][0])),
+      gain_denormalize(torch.sigmoid(parameters[1][1])),
+      q_denormalize(torch.sigmoid(parameters[1][2]))
     )
 
 
@@ -142,12 +177,12 @@ for n in pbar:
   pbar.set_description(f"{loss.item():0.4e}")
 
 print("PREDICTION")
-print(frequency_denormalize(torch.sigmoid(F1)),
-      gain_denormalize(torch.sigmoid(G1)),
-      q_denormalize(torch.sigmoid(Q1)),
-      frequency_denormalize(torch.sigmoid(F2)),
-      gain_denormalize(torch.sigmoid(G2)),
-      q_denormalize(torch.sigmoid(Q2)))
+print(frequency_denormalize(torch.sigmoid(parameters[0][0])),
+      gain_denormalize(torch.sigmoid(parameters[0][1])),
+      q_denormalize(torch.sigmoid(parameters[0][2])),
+      frequency_denormalize(torch.sigmoid(parameters[0][0])),
+      gain_denormalize(torch.sigmoid(parameters[0][1])),
+      q_denormalize(torch.sigmoid(parameters[0][2])))
 print("ERROR")
 
 
@@ -160,4 +195,7 @@ plt.plot(np.array([target_F1.detach().numpy(), target_F2.detach().numpy()]), np.
 
 plt.semilogx(f, 20 * np.log10(target_response.detach().numpy()), label="Target")
 plt.legend()
+plt.title("Frequency response matching using stochastic gradient descent")
+plt.xlabel("Frequency (Hz)")
+plt.ylabel("Magnitude (dB)")
 plt.savefig("./match.png")
