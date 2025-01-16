@@ -1,6 +1,21 @@
 import torch
 from tqdm import tqdm
 import numpy as np
+def lowshelf(f,fc, A, Q):
+        W = f / fc
+        WW = W*W
+        gain_q = torch.sqrt(A) / Q
+
+        num_real = torch.pow((A - WW), 2.)
+        num_img  = torch.pow(gain_q * W, 2.)
+        num = torch.sqrt(num_real + num_img)
+
+        den_real = torch.pow((1. - A * WW), 2.)
+        den_img  = num_img
+        den =  torch.sqrt(den_real + den_img)
+
+        return A * (num / den)
+
 
 def bell_filter(f, f_c, A, Q):
   #A = 10 **(g/40.0)
@@ -29,7 +44,7 @@ def evaluate_mag_response(
     Q_3: torch.Tensor
 ):
 
-  bell_1 = bell_filter(f, f_c_1, G_1, Q_1)
+  bell_1 = lowshelf(f, f_c_1, G_1, Q_1)
   bell_2 = bell_filter(f, f_c_2, G_2, Q_2)
   bell_3 = bell_filter(f, f_c_3, G_3, Q_3)
 
