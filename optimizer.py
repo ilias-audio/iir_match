@@ -87,7 +87,7 @@ def evaluate_mag_response(
 # MAIN
 ###############################################################################
 # set the range of frequencies that we evaluate over
-f = torch.linspace(20, 20000, 2000)
+f = torch.logspace(torch.log10(torch.tensor(20.)), torch.log10(torch.tensor(20000)), 2000)
 
 num_bands = 3
 Frequencies = np.array([])
@@ -156,6 +156,8 @@ plt.plot(
 
 plt.semilogx(f, 20 * np.log10(target_response.detach().numpy()), label="Target", linestyle='dotted', color='b')
 plt.plot(target_F.detach().numpy(), (target_G.detach().numpy()), 'o', color='b')
+
+plt
 
 plt.legend()
 plt.title("Frequency response matching using stochastic gradient descent")
