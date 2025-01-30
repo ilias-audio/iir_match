@@ -6,15 +6,13 @@ from Filters import *
 ###############################################################################
 # UTILITIES
 ###############################################################################
-
 def log_normalize(value, min, max):
   value = (torch.log(value) - torch.log(min)) / (torch.log(max) - torch.log((min)))
-  return (value)
+  return value
 
 def log_denormalize(value, min, max):
   value = 10 ** (value * torch.log10(max) + (1.0 - value) * torch.log10(min))
   return value
-
 
 def lin_normalize(value, min, max):
   value = ((value) * (max - min)) + min
@@ -24,50 +22,44 @@ def lin_denormalize(value, min, max):
   value = min + (max - min) * value
   return value
 
-def frequency_denormalize(f):
-  min = torch.tensor(20.0)
-  max = torch.tensor(20000.0)
 
-  f = log_denormalize(f, min, max)
-  return f
+MIN_FREQ = 20.
+MAX_FREQ = 20000.
+
+def frequency_denormalize(f):
+  min = torch.tensor(MIN_FREQ)
+  max = torch.tensor(MAX_FREQ)
+  return log_denormalize(f, min, max)
 
 def frequency_normalize(f):
-  min = torch.tensor(20.0)
-  max = torch.tensor(20000.0)
+  min = torch.tensor(MIN_FREQ)
+  max = torch.tensor(MAX_FREQ)
+  return log_normalize(f, min, max)
 
-  f = log_normalize(f, min, max)
-  return f
+MAX_GAIN_DB =  12.
+MIN_GAIN_DB = - MAX_GAIN_DB
 
 def gain_denormalize(g):
-  min = torch.tensor(-12.0)
-  max = torch.tensor(12.0)
-
-  real_gain = lin_denormalize(g, min, max)
-
-  g = 10.0 ** (real_gain/40.0)
-
-  return g
+  min = torch.tensor(MIN_GAIN_DB)
+  max = torch.tensor(MAX_GAIN_DB)
+  return lin_denormalize(g, min, max)
 
 def gain_normalize(g):
   min = torch.tensor(-12.0)
   max = torch.tensor(12.0)
+  return lin_normalize(g, min, max)
 
-  g = lin_normalize(g, min, max)
-
-  return g
+MIN_Q = 0.01
+MAX_Q = 4.
 
 def q_denormalize(q):
-
-  min = torch.tensor(0.01)
-  max = torch.tensor(4.0)
-
+  min = torch.tensor(MIN_Q)
+  max = torch.tensor(MAX_Q)
   return log_denormalize(q, min, max)
 
 def q_normalize(q):
-
-  min = torch.tensor(0.01)
-  max = torch.tensor(4.0)
-
+  min = torch.tensor(MIN_Q)
+  max = torch.tensor(MAX_Q)
   return log_normalize(q, min, max)
 
 def evaluate_mag_response(
@@ -97,7 +89,7 @@ def evaluate_mag_response(
 # set the range of frequencies that we evaluate over
 f = torch.linspace(20, 20000, 2000)
 
-num_bands = 5
+num_bands = 3
 Frequencies = np.array([])
 GdB = np.array([])
 Qs = np.array([])
@@ -109,19 +101,19 @@ for i in range(num_bands):
   Qs = np.append(Qs, q_denormalize(np.random.uniform()))
 
 target_F = (torch.tensor(Frequencies))
-target_G = (torch.tensor(10.0**(GdB/40)))
+target_G = (torch.tensor(GdB))
 target_Q = (torch.tensor(Qs))
 
 target_response = evaluate_mag_response(f, target_F, target_G, target_Q)
 
-n_iters = 30000
+n_iters = 10000
 
 parameters = torch.nn.ParameterList()
 
 for i in range(num_bands):
   parameters.append(torch.tensor([np.random.rand(), np.random.rand(), np.random.rand()]))
 
-optimizer = torch.optim.Adam(parameters, lr=0.06)
+optimizer = torch.optim.Adam(parameters, lr=0.1)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, n_iters)
 
 
@@ -129,14 +121,17 @@ pbar = tqdm(range(n_iters))
 for n in pbar:
   # reset gradients
   optimizer.zero_grad()
-
-  # evaluate response of current solution
+  # Extract parameters correctly as tensors
+  freq_params = torch.stack([band[0] for band in parameters])
+  gain_params = torch.stack([band[1] for band in parameters])
+  q_params    = torch.stack([band[2] for band in parameters])
+  # Apply sigmoid and denormalization
   pred_response = evaluate_mag_response(
       f,
-      frequency_denormalize(torch.sigmoid(parameters[:][0])),
-      gain_denormalize(torch.sigmoid(parameters[:][1])),
-      q_denormalize(torch.sigmoid(parameters[:][2]))
-    )
+      frequency_denormalize(torch.sigmoid(freq_params)),
+      gain_denormalize(torch.sigmoid(gain_params)),
+      q_denormalize(torch.sigmoid(q_params))
+  )
 
 
 
@@ -160,7 +155,7 @@ plt.plot(
 )
 
 plt.semilogx(f, 20 * np.log10(target_response.detach().numpy()), label="Target", linestyle='dotted', color='b')
-plt.plot(target_F.detach().numpy(), 40*np.log10(target_G.detach().numpy()), 'o', color='b')
+plt.plot(target_F.detach().numpy(), (target_G.detach().numpy()), 'o', color='b')
 
 plt.legend()
 plt.title("Frequency response matching using stochastic gradient descent")
