@@ -1,6 +1,7 @@
 import torch
 from tqdm import tqdm
 import numpy as np
+from Filters import *
 def lowshelf(f,fc, A, Q):
         W = f / fc
         WW = W*W
@@ -44,12 +45,12 @@ def evaluate_mag_response(
     Q_3: torch.Tensor
 ):
 
-  bell_1 = lowshelf(f, f_c_1, G_1, Q_1)
-  bell_2 = bell_filter(f, f_c_2, G_2, Q_2)
-  bell_3 = bell_filter(f, f_c_3, G_3, Q_3)
+  bell_1 = RBJ_LowShelf(f, f_c_1, G_1, Q_1)
+  bell_2 = RBJ_Bell(f, f_c_2, G_2, Q_2)
+  bell_3 = RBJ_Bell(f, f_c_3, G_3, Q_3)
 
 
-  response = bell_1 * bell_2 * bell_3
+  response = bell_1.response * bell_2.response * bell_3.response
 
 
   return response
