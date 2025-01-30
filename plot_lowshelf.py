@@ -1,4 +1,4 @@
-from Filters import RBJ_LowShelf, RBJ_HighShelf
+from Filters import *
 import torch
 
 import matplotlib.pyplot as plt 
@@ -8,9 +8,9 @@ print(frequencies)
 
 CUT_OFF = torch.tensor(1000.0)
 
-GAIN = torch.tensor(-3.0) #dB
+GAIN = torch.tensor(3.0) #dB
 
-low_shelf = RBJ_HighShelf(frequencies, CUT_OFF, GAIN, q_factor=0.7071)
+low_shelf = RBJ_Bell(frequencies, CUT_OFF, GAIN, q_factor=0.7071)
 
-plt.semilogx(frequencies, 10.0 * torch.log10(low_shelf.response))
+plt.semilogx(frequencies, 20.0 * torch.log10(low_shelf.response))
 plt.savefig("shelf.png")
