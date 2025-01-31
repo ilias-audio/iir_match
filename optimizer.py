@@ -69,13 +69,13 @@ def evaluate_mag_response(
     Q: torch.Tensor      # Q values
 ):
     assert len(F) == len(G) == len(Q), "All parameter arrays must have the same length"
-    num_bands = len(F)
+    NUM_OF_BANDS = len(F)
     
     # First band: Low Shelf
     response = RBJ_HighShelf(x, F[0], G[0], Q[0]).response
 
     # Middle bands: Bell filters
-    for i in range(1, num_bands - 1):
+    for i in range(1, NUM_OF_BANDS - 1):
         response *= RBJ_Bell(x, F[i], G[i], Q[i]).response
 
     # Last band: High Shelf
@@ -87,15 +87,20 @@ def evaluate_mag_response(
 # MAIN
 ###############################################################################
 # set the range of frequencies that we evaluate over
-f = torch.logspace(torch.log10(torch.tensor(20.)), torch.log10(torch.tensor(20000)), 2000)
+NUM_OF_BANDS = 4
+NUM_OF_ITER = 3000
+NUM_OF_FREQ = 256
 
-num_bands = 3
+
+
+f = torch.logspace(torch.log10(torch.tensor(20.)), torch.log10(torch.tensor(20000)), NUM_OF_FREQ)
+
 Frequencies = np.array([])
 GdB = np.array([])
 Qs = np.array([])
 
 
-for i in range(num_bands):
+for i in range(NUM_OF_BANDS):
   Frequencies = np.append(Frequencies, frequency_denormalize(np.random.uniform()))
   GdB = np.append(GdB, gain_normalize(np.random.uniform()))
   Qs = np.append(Qs, q_denormalize(np.random.uniform()))
@@ -106,18 +111,18 @@ target_Q = (torch.tensor(Qs))
 
 target_response = evaluate_mag_response(f, target_F, target_G, target_Q)
 
-n_iters = 10000
+
 
 parameters = torch.nn.ParameterList()
 
-for i in range(num_bands):
+for i in range(NUM_OF_BANDS):
   parameters.append(torch.tensor([np.random.rand(), np.random.rand(), np.random.rand()]))
 
 optimizer = torch.optim.Adam(parameters, lr=0.1)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, n_iters)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, NUM_OF_ITER)
 
 
-pbar = tqdm(range(n_iters))
+pbar = tqdm(range(NUM_OF_ITER))
 for n in pbar:
   # reset gradients
   optimizer.zero_grad()
@@ -136,8 +141,14 @@ for n in pbar:
 
 
   # measure the MSE
-  loss = torch.nn.functional.mse_loss((pred_response), (target_response))
+  loss = torch.nn.functional.l1_loss((pred_response), (target_response))
   loss.backward()
+  # Scale frequency gradients to have more impact
+  with torch.no_grad():
+    parameters[0].grad *= 10  # Boost frequency gradients
+    parameters[1].grad *= 3   # Moderate Q gradients
+    parameters[2].grad *= 1   # Normal gain gradients
+
   optimizer.step()
   scheduler.step()
 
@@ -157,7 +168,7 @@ plt.plot(
 plt.semilogx(f, 20 * np.log10(target_response.detach().numpy()), label="Target", linestyle='dotted', color='b')
 plt.plot(target_F.detach().numpy(), (target_G.detach().numpy()), 'o', color='b')
 
-plt
+
 
 plt.legend()
 plt.title("Frequency response matching using stochastic gradient descent")
