@@ -145,7 +145,7 @@ for n in pbar:
   loss.backward()
   # Scale frequency gradients to have more impact
   with torch.no_grad():
-    parameters[0].grad *= 10  # Boost frequency gradients
+    parameters[0].grad *= 6  # Boost frequency gradients
     parameters[1].grad *= 3   # Moderate Q gradients
     parameters[2].grad *= 1   # Normal gain gradients
 
