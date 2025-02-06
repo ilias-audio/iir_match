@@ -76,8 +76,8 @@ class RBJ_Bell:
     def compute_response(self):
         W = self.current_freq / self.cut_off
         WW = W*W
-        gain_q = torch.sqrt(self.A) / self.q_factor
-        inv_gainq = 1. / (torch.sqrt(self.A) * self.q_factor)
+        gain_q = self.A / self.q_factor
+        inv_gainq = 1. / (self.A * self.q_factor)
 
         num_real = torch.pow((1. - WW), 2.)
         num_img  = torch.pow(gain_q * W, 2.)
