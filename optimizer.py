@@ -36,7 +36,7 @@ def frequency_normalize(f):
   max = torch.tensor(MAX_FREQ)
   return log_normalize(f, min, max)
 
-MAX_GAIN_DB =  24.
+MAX_GAIN_DB =  28.
 MIN_GAIN_DB = - MAX_GAIN_DB
 
 def gain_denormalize(g):
@@ -84,18 +84,9 @@ def evaluate_mag_response(
     return response
 
 ###############################################################################
-# MAIN
+# LOAD FREQ RESPONSES
 ###############################################################################
-# set the range of frequencies that we evaluate over
-NUM_OF_BANDS = 12
-NUM_OF_ITER = 30000
-# NUM_OF_FREQ = 512
-
 NUM_OF_DELAYS = 6
-SAMPLE_RATE = 48000
-
-# f = torch.logspace(torch.log10(torch.tensor(20.)), torch.log10(torch.tensor(20000)), NUM_OF_FREQ)
-
 
 import scipy.io 
 target_matrix = scipy.io.loadmat("target_mag.mat")
@@ -104,6 +95,22 @@ f = torch.tensor(target_matrix.get('w')).squeeze()
 target_response = torch.tensor(target_matrix.get('target_mag')).squeeze()
 
 target_response = torch.pow(10.0, target_response / 20.0)
+
+###############################################################################
+# MAIN
+###############################################################################
+# set the range of frequencies that we evaluate over
+NUM_OF_BANDS = 4
+NUM_OF_ITER = 6000
+# NUM_OF_FREQ = 512
+
+
+SAMPLE_RATE = 48000
+
+# f = torch.logspace(torch.log10(torch.tensor(20.)), torch.log10(torch.tensor(20000)), NUM_OF_FREQ)
+
+
+
 # Frequencies = np.array([])
 # GdB = np.array([])
 # Qs = np.array([])
@@ -175,11 +182,19 @@ import matplotlib.pyplot as plt
 
 plt.semilogx(f, 20 * np.log10(pred_response.detach().numpy()), label="Prediction", linestyle='dotted', color='orange')
 
+low_shelf_response = RBJ_LowShelf(f, frequency_denormalize(torch.sigmoid(freq_params[0])), gain_denormalize(torch.sigmoid(gain_params[0])), q_denormalize(torch.sigmoid(q_params[0]))).response
+high_shelf_response = RBJ_HighShelf(f, frequency_denormalize(torch.sigmoid(freq_params[-1])), gain_denormalize(torch.sigmoid(gain_params[-1])), q_denormalize(torch.sigmoid(q_params[-1]))).response
+
+plt.semilogx(f, 20 * np.log10(low_shelf_response.detach().numpy()), label="LowShelf", linestyle='dotted', color='grey')
+plt.semilogx(f, 20 * np.log10(high_shelf_response.detach().numpy()), label="HighShelf", color='grey')
+
+
 plt.plot(
     frequency_denormalize(torch.sigmoid(torch.tensor([band[0] for band in parameters]))).detach().numpy(),
-    gain_normalize(torch.sigmoid(torch.tensor([band[1] for band in parameters]))).detach().numpy(),
+    gain_denormalize(torch.sigmoid(torch.tensor([band[1] for band in parameters]))).detach().numpy(),
     'o', color='orange'
 )
+
 
 plt.semilogx(f, 20 * np.log10(target_response.detach().numpy()), label="Target", linestyle='dotted', color='b')
 # plt.plot(target_F.detach().numpy(), (target_G.detach().numpy()), 'o', color='b')
