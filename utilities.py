@@ -33,7 +33,7 @@ def frequency_normalize(f):
   max = torch.tensor(MAX_FREQ)
   return log_normalize(f, min, max)
 
-MAX_GAIN_DB =  12.
+MAX_GAIN_DB =  24.
 MIN_GAIN_DB = - MAX_GAIN_DB
 
 def gain_denormalize(g):
@@ -46,8 +46,8 @@ def gain_normalize(g):
   max = torch.tensor(MAX_GAIN_DB)
   return lin_normalize(g, min, max)
 
-MIN_Q = 0.01
-MAX_Q = 4.
+MIN_Q = 0.1
+MAX_Q = 10.
 
 def q_denormalize(q):
   min = torch.tensor(MIN_Q)

@@ -37,9 +37,9 @@ def evaluate_mag_response(
 # LOAD FREQ RESPONSES
 ###############################################################################
 NUM_OF_DELAYS = 1
-SAMPLE_RATE = 48000
+SAMPLE_RATE = 24000
 
-DELAYS = torch.randint(100, 3000, (NUM_OF_DELAYS, 1), device=device)
+DELAYS = torch.randint(100, 2000, (NUM_OF_DELAYS, 1), device=device)
 DELAYS, _ = torch.sort(DELAYS, dim=0)
 
 target_matrix = scipy.io.loadmat("target_mag.mat")
@@ -47,7 +47,7 @@ target_matrix = scipy.io.loadmat("target_mag.mat")
 f = torch.tensor(target_matrix.get('w'), dtype=torch.float32).squeeze().to(device)
 target_response = torch.tensor(target_matrix.get('target_mag'), dtype=torch.float32).squeeze().to(device)
 
-DELAY_OF_EXAMPLE = 1333
+DELAY_OF_EXAMPLE = 1500
 RT_EXAMPLE = (-60 * DELAY_OF_EXAMPLE) / (SAMPLE_RATE * target_response)
 
 target_responses = (-60 * DELAYS) / (SAMPLE_RATE * RT_EXAMPLE)
@@ -56,11 +56,11 @@ target_responses = torch.pow(10.0, target_responses / 20.0)
 ###############################################################################
 # MAIN
 ###############################################################################
-NUM_OF_BANDS = 4
-NUM_OF_ITER = 3000
+NUM_OF_BANDS = 8
+NUM_OF_ITER = 10000
 
 parameters = torch.nn.ParameterList([
-  torch.nn.Parameter(torch.tensor(np.random.rand(NUM_OF_DELAYS*NUM_OF_BANDS), requires_grad=True, device=device, dtype=torch.float32))
+  torch.nn.Parameter(torch.zeros((NUM_OF_DELAYS*NUM_OF_BANDS), requires_grad=True, device=device, dtype=torch.float32))
   for _ in range(3)
 ])
 
@@ -83,18 +83,18 @@ for n in pbar:
     q_denormalize(torch.sigmoid(q_params))
   )
 
-  if n % 100 == 0:
+  if n % 1000 == 0:
     print("Freqs: ", frequency_denormalize(torch.sigmoid(freq_params)).tolist())
     print("Gain: " , gain_denormalize(torch.sigmoid(gain_params)).tolist())
     print("Q: "    , q_denormalize(torch.sigmoid(q_params)).tolist())
-    print("Freqs: ", freq_params.tolist())
-    print("Gain: " , gain_params.tolist())
-    print("Q: "    , q_params.tolist())
+    # print("Freqs: ", freq_params.tolist())
+    # print("Gain: " , gain_params.tolist())
+    # print("Q: "    , q_params.tolist())
 
     
     plt.clf()
-    plt.semilogx(f.cpu(), 20 * np.log10(pred_responses.detach().cpu().numpy().T), label="Prediction", linestyle='dotted')
-    plt.semilogx(f.cpu(), 20 * np.log10(target_responses.detach().cpu().numpy().T), label="Prediction", linestyle='dotted')
+    plt.semilogx(f.cpu(), 20 * np.log10(pred_responses.detach().cpu().numpy().T), label="Prediction")
+    plt.semilogx(f.cpu(), 20 * np.log10(target_responses.detach().cpu().numpy().T), label="Target", linestyle='dotted')
     plt.plot(frequency_denormalize(torch.sigmoid(freq_params)).detach().cpu(), gain_denormalize(torch.sigmoid(gain_params)).detach().cpu().numpy(), 'o')
     plt.legend()
     plt.title("Frequency response matching using stochastic gradient descent")
@@ -103,9 +103,10 @@ for n in pbar:
     plt.savefig("./figures/match"+str(n)+".png")
 
   loss = torch.zeros(NUM_OF_DELAYS, device=device)
+  optimizer.zero_grad()
   for i in range(NUM_OF_DELAYS):
-    loss[i] = torch.nn.functional.mse_loss(pred_responses[i], target_responses[i])
-    loss[i].backward(retain_graph=False)
+    loss[i] = torch.nn.functional.mse_loss(20*torch.log10(pred_responses[i]), 20*torch.log10(target_responses[i]))
+    loss[i].backward(retain_graph=True)
   optimizer.step()
   scheduler.step()
 
