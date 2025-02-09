@@ -2,6 +2,7 @@ import torch
 from tqdm import tqdm
 import numpy as np
 from Filters import *
+import matplotlib.pyplot as plt
 
 ###############################################################################
 # UTILITIES
@@ -87,6 +88,10 @@ def evaluate_mag_response(
 # LOAD FREQ RESPONSES
 ###############################################################################
 NUM_OF_DELAYS = 6
+SAMPLE_RATE = 48000
+
+DELAYS = torch.randint(100, 3000, (NUM_OF_DELAYS, 1))
+DELAYS, _ = torch.sort(DELAYS, dim=0)
 
 import scipy.io 
 target_matrix = scipy.io.loadmat("target_mag.mat")
@@ -94,7 +99,25 @@ target_matrix = scipy.io.loadmat("target_mag.mat")
 f = torch.tensor(target_matrix.get('w')).squeeze()
 target_response = torch.tensor(target_matrix.get('target_mag')).squeeze()
 
-target_response = torch.pow(10.0, target_response / 20.0)
+# target_response = torch.pow(10.0, target_response / 20.0)
+
+# this is a theoretical array of response, we assume the first response was with a delay line of 1333 samples giving a max of 2s of RT60
+DELAY_OF_EXAMPLE = 1333
+
+RT_EXAMPLE = (-60 * DELAY_OF_EXAMPLE) / (SAMPLE_RATE * target_response)
+
+target_responses = (-60 * DELAYS) / (SAMPLE_RATE * RT_EXAMPLE)
+
+target_responses_db = 20 * torch.log10(target_responses)
+
+for i, delay in enumerate(DELAYS):
+  plt.semilogx(f, target_responses[i].T, label=f"{delay.item()} samples", linestyle='dotted')
+plt.legend()
+plt.title("Target Frequency Response of each delay line")
+plt.xlabel("Frequency (Hz)")
+plt.ylabel("Magnitude (dB)")
+plt.savefig("./target.png")
+
 
 ###############################################################################
 # MAIN
@@ -105,7 +128,6 @@ NUM_OF_ITER = 6000
 # NUM_OF_FREQ = 512
 
 
-SAMPLE_RATE = 48000
 
 # f = torch.logspace(torch.log10(torch.tensor(20.)), torch.log10(torch.tensor(20000)), NUM_OF_FREQ)
 
@@ -178,7 +200,7 @@ for n in pbar:
   pbar.set_description(f"{loss.item():0.4e}")
 
 
-import matplotlib.pyplot as plt
+
 
 plt.semilogx(f, 20 * np.log10(pred_response.detach().numpy()), label="Prediction", linestyle='dotted', color='orange')
 
