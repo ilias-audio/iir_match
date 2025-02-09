@@ -36,8 +36,8 @@ def evaluate_mag_response(
 ###############################################################################
 # LOAD FREQ RESPONSES
 ###############################################################################
-NUM_OF_DELAYS = 1
-SAMPLE_RATE = 24000
+NUM_OF_DELAYS = 6
+SAMPLE_RATE = 48000
 
 DELAYS = torch.randint(100, 2000, (NUM_OF_DELAYS, 1), device=device)
 DELAYS, _ = torch.sort(DELAYS, dim=0)
@@ -60,8 +60,8 @@ NUM_OF_BANDS = 8
 NUM_OF_ITER = 10000
 
 parameters = torch.nn.ParameterList([
-  torch.nn.Parameter(torch.zeros((NUM_OF_DELAYS*NUM_OF_BANDS), requires_grad=True, device=device, dtype=torch.float32))
-  for _ in range(3)
+  torch.nn.Parameter(torch.rand((3), requires_grad=True, device=device, dtype=torch.float32))
+  for _ in range(NUM_OF_DELAYS*NUM_OF_BANDS)
 ])
 
 optimizer = torch.optim.Adam(parameters, lr=0.1)
@@ -69,9 +69,9 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, NUM_OF_ITER)
 pbar = tqdm(range(NUM_OF_ITER))
 
 for n in pbar:  
-  freq_params = parameters[0].view(NUM_OF_DELAYS, NUM_OF_BANDS)
-  gain_params = parameters[1].view(NUM_OF_DELAYS, NUM_OF_BANDS)
-  q_params    = parameters[2].view(NUM_OF_DELAYS, NUM_OF_BANDS)
+  freq_params = torch.stack([param[0] for param in parameters]).view(NUM_OF_DELAYS, NUM_OF_BANDS)
+  gain_params = torch.stack([param[1] for param in parameters]).view(NUM_OF_DELAYS, NUM_OF_BANDS)
+  q_params    = torch.stack([param[2] for param in parameters]).view(NUM_OF_DELAYS, NUM_OF_BANDS)
 
   f_expanded = f.unsqueeze(0).repeat(NUM_OF_DELAYS, 1)
   f_expanded = f_expanded.T
@@ -84,9 +84,9 @@ for n in pbar:
   )
 
   if n % 1000 == 0:
-    print("Freqs: ", frequency_denormalize(torch.sigmoid(freq_params)).tolist())
-    print("Gain: " , gain_denormalize(torch.sigmoid(gain_params)).tolist())
-    print("Q: "    , q_denormalize(torch.sigmoid(q_params)).tolist())
+    # print("Freqs: ", frequency_denormalize(torch.sigmoid(freq_params)).tolist())
+    # print("Gain: " , gain_denormalize(torch.sigmoid(gain_params)).tolist())
+    # print("Q: "    , q_denormalize(torch.sigmoid(q_params)).tolist())
     # print("Freqs: ", freq_params.tolist())
     # print("Gain: " , gain_params.tolist())
     # print("Q: "    , q_params.tolist())
