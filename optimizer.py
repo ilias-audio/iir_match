@@ -7,7 +7,7 @@ from utilities import *
 import scipy.io
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu")
+device = torch.device("cpu") # still too slow on GPU
 
 def evaluate_mag_response(
   x: torch.Tensor,     # Frequency vector
@@ -36,7 +36,7 @@ def evaluate_mag_response(
 ###############################################################################
 # LOAD FREQ RESPONSES
 ###############################################################################
-NUM_OF_DELAYS = 6
+NUM_OF_DELAYS = 3
 SAMPLE_RATE = 48000
 
 DELAYS = torch.randint(100, 2000, (NUM_OF_DELAYS, 1), device=device)
@@ -56,22 +56,32 @@ target_responses = torch.pow(10.0, target_responses / 20.0)
 ###############################################################################
 # MAIN
 ###############################################################################
-NUM_OF_BANDS = 8
+NUM_OF_BANDS = 12
 NUM_OF_ITER = 10000
 
-parameters = torch.nn.ParameterList([
-  torch.nn.Parameter(torch.rand((3), requires_grad=True, device=device, dtype=torch.float32))
-  for _ in range(NUM_OF_DELAYS*NUM_OF_BANDS)
-])
+parameters = torch.nn.ParameterList()
+
+parameters.append(torch.rand(NUM_OF_BANDS,requires_grad=True, device=device, dtype=torch.float32)) # Common Freqs
+parameters.append(torch.rand(NUM_OF_DELAYS*NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # specific gains
+parameters.append(torch.rand(NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # Common Q
+
+# parameters.append([
+#   torch.nn.Parameter(torch.rand((1), requires_grad=True, device=device, dtype=torch.float32))
+#   for _ in range(NUM_OF_DELAYS*NUM_OF_BANDS)
+# ])
 
 optimizer = torch.optim.Adam(parameters, lr=0.1)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, NUM_OF_ITER)
 pbar = tqdm(range(NUM_OF_ITER))
 
 for n in pbar:  
-  freq_params = torch.stack([param[0] for param in parameters]).view(NUM_OF_DELAYS, NUM_OF_BANDS)
-  gain_params = torch.stack([param[1] for param in parameters]).view(NUM_OF_DELAYS, NUM_OF_BANDS)
-  q_params    = torch.stack([param[2] for param in parameters]).view(NUM_OF_DELAYS, NUM_OF_BANDS)
+  # freq_params = torch.stack([param[0] for param in parameters]).view(NUM_OF_DELAYS, NUM_OF_BANDS)
+  # gain_params = torch.stack([param[1] for param in parameters]).view(NUM_OF_DELAYS, NUM_OF_BANDS)
+  # q_params    = torch.stack([param[2] for param in parameters]).view(NUM_OF_DELAYS, NUM_OF_BANDS)
+
+  freq_params = parameters[0].unsqueeze(0).repeat(NUM_OF_DELAYS, 1)
+  gain_params = parameters[1].view(NUM_OF_DELAYS, NUM_OF_BANDS)
+  q_params = parameters[2].unsqueeze(0).repeat(NUM_OF_DELAYS, 1)
 
   f_expanded = f.unsqueeze(0).repeat(NUM_OF_DELAYS, 1)
   f_expanded = f_expanded.T
@@ -95,7 +105,7 @@ for n in pbar:
     plt.clf()
     plt.semilogx(f.cpu(), 20 * np.log10(pred_responses.detach().cpu().numpy().T), label="Prediction")
     plt.semilogx(f.cpu(), 20 * np.log10(target_responses.detach().cpu().numpy().T), label="Target", linestyle='dotted')
-    plt.plot(frequency_denormalize(torch.sigmoid(freq_params)).detach().cpu(), gain_denormalize(torch.sigmoid(gain_params)).detach().cpu().numpy(), 'o')
+    # plt.plot(frequency_denormalize(torch.sigmoid(freq_params)).detach().cpu(), gain_denormalize(torch.sigmoid(gain_params)).detach().cpu().numpy(), 'o')
     plt.legend()
     plt.title("Frequency response matching using stochastic gradient descent")
     plt.xlabel("Frequency (Hz)")
