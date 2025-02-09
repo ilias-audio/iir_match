@@ -36,7 +36,7 @@ def evaluate_mag_response(
 ###############################################################################
 # LOAD FREQ RESPONSES
 ###############################################################################
-NUM_OF_DELAYS = 6
+NUM_OF_DELAYS = 1
 SAMPLE_RATE = 48000
 
 DELAYS = torch.randint(100, 3000, (NUM_OF_DELAYS, 1), device=device)
@@ -57,10 +57,10 @@ target_responses = torch.pow(10.0, target_responses / 20.0)
 # MAIN
 ###############################################################################
 NUM_OF_BANDS = 4
-NUM_OF_ITER = 1000
+NUM_OF_ITER = 3000
 
 parameters = torch.nn.ParameterList([
-  torch.nn.Parameter(torch.tensor(np.random.rand(24), requires_grad=True, device=device, dtype=torch.float32))
+  torch.nn.Parameter(torch.tensor(np.random.rand(NUM_OF_DELAYS*NUM_OF_BANDS), requires_grad=True, device=device, dtype=torch.float32))
   for _ in range(3)
 ])
 
@@ -84,18 +84,30 @@ for n in pbar:
   )
 
   if n % 100 == 0:
+    print("Freqs: ", frequency_denormalize(torch.sigmoid(freq_params)).tolist())
+    print("Gain: " , gain_denormalize(torch.sigmoid(gain_params)).tolist())
+    print("Q: "    , q_denormalize(torch.sigmoid(q_params)).tolist())
+    print("Freqs: ", freq_params.tolist())
+    print("Gain: " , gain_params.tolist())
+    print("Q: "    , q_params.tolist())
+
+    
     plt.clf()
     plt.semilogx(f.cpu(), 20 * np.log10(pred_responses.detach().cpu().numpy().T), label="Prediction", linestyle='dotted')
+    plt.semilogx(f.cpu(), 20 * np.log10(target_responses.detach().cpu().numpy().T), label="Prediction", linestyle='dotted')
+    plt.plot(frequency_denormalize(torch.sigmoid(freq_params)).detach().cpu(), gain_denormalize(torch.sigmoid(gain_params)).detach().cpu().numpy(), 'o')
     plt.legend()
     plt.title("Frequency response matching using stochastic gradient descent")
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("Magnitude (dB)")
     plt.savefig("./figures/match"+str(n)+".png")
 
-  loss = torch.nn.functional.mse_loss(pred_responses, target_responses)
-  loss.backward(retain_graph=False)
+  loss = torch.zeros(NUM_OF_DELAYS, device=device)
+  for i in range(NUM_OF_DELAYS):
+    loss[i] = torch.nn.functional.mse_loss(pred_responses[i], target_responses[i])
+    loss[i].backward(retain_graph=False)
   optimizer.step()
   scheduler.step()
 
-  pbar.set_description(f"{loss.item():0.4e}")
+  pbar.set_description(f"{loss[0].item():0.4e}")
 
