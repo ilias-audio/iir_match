@@ -5,10 +5,11 @@ from Filters import *
 import matplotlib.pyplot as plt
 from utilities import *
 import scipy.io
+import scipy.signal as signal
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = torch.device("cpu") # still too slow on GPU
-
+SAMPLE_RATE = 48000
 def evaluate_mag_response(
   x: torch.Tensor,     # Frequency vector
   F: torch.Tensor,     # Center frequencies (NUM_OF_DELAYS x NUM_OF_BANDS)
@@ -33,11 +34,36 @@ def evaluate_mag_response(
 
   return response
 
+def sos_mag_response(F: torch.Tensor,     # Center frequencies (NUM_OF_DELAYS x NUM_OF_BANDS)
+  G: torch.Tensor,     # Gain values (NUM_OF_DELAYS x NUM_OF_BANDS)
+  Q: torch.Tensor,      # Q values (NUM_OF_DELAYS x NUM_OF_BANDS)
+  Fs: torch.Tensor     # Sample rate
+  ):
+    assert F.shape == G.shape == Q.shape, "All parameter arrays must have the same shape"
+    NUM_OF_DELAYS, NUM_OF_BANDS = F.shape
+    
+    for i in range(NUM_OF_BANDS):
+      if i == 0:
+        low_shelf = RBJ_LowShelf(Fs, F[:, 0], G[:, 0], Q[:, 0], sample_rate=Fs)
+        low_shelf.compute_sos()
+        sos = low_shelf.sos
+      elif i == NUM_OF_BANDS - 1:
+        high_shelf = RBJ_HighShelf(Fs, F[:, -1], G[:, -1], Q[:, -1], sample_rate=Fs)
+        high_shelf.compute_sos()
+        sos = torch.cat((sos, high_shelf.sos), dim=0)
+      else:
+        bell = RBJ_Bell(Fs, F[:, i], G[:, i], Q[:, i], sample_rate=Fs)
+        bell.compute_sos()
+        sos = torch.cat((sos, bell.sos), dim=0)
+ 
+    return signal.sosfreqz(sos.numpy(), worN=2028, fs=Fs)
+    
+
 ###############################################################################
 # LOAD FREQ RESPONSES
 ###############################################################################
-NUM_OF_DELAYS = 3
-SAMPLE_RATE = 48000
+NUM_OF_DELAYS = 1
+
 
 DELAYS = torch.randint(100, 2000, (NUM_OF_DELAYS, 1), device=device)
 DELAYS, _ = torch.sort(DELAYS, dim=0)
@@ -56,7 +82,7 @@ target_responses = torch.pow(10.0, target_responses / 20.0)
 ###############################################################################
 # MAIN
 ###############################################################################
-NUM_OF_BANDS = 12
+NUM_OF_BANDS = 16
 NUM_OF_ITER = 10000
 
 parameters = torch.nn.ParameterList()
@@ -92,6 +118,13 @@ for n in pbar:
     gain_denormalize(torch.sigmoid(gain_params)),
     q_denormalize(torch.sigmoid(q_params))
   )
+  
+  sos_freq, sos_mag = sos_mag_response(
+    frequency_denormalize(torch.sigmoid(freq_params)),
+    gain_denormalize(torch.sigmoid(gain_params)),
+    q_denormalize(torch.sigmoid(q_params)),
+    SAMPLE_RATE
+  )
 
   if n % 1000 == 0:
     # print("Freqs: ", frequency_denormalize(torch.sigmoid(freq_params)).tolist())
@@ -105,9 +138,16 @@ for n in pbar:
     plt.clf()
     plt.semilogx(f.cpu(), 20 * np.log10(pred_responses.detach().cpu().numpy().T), label="Prediction")
     plt.semilogx(f.cpu(), 20 * np.log10(target_responses.detach().cpu().numpy().T), label="Target", linestyle='dotted')
+    plt.semilogx(sos_freq, 20 * np.log10(sos_mag), label="sos", linestyle='dotted')
     # plt.plot(frequency_denormalize(torch.sigmoid(freq_params)).detach().cpu(), gain_denormalize(torch.sigmoid(gain_params)).detach().cpu().numpy(), 'o')
     plt.legend()
-    plt.title("Frequency response matching using stochastic gradient descent")
+    # plt.title("Frequency response matching using stochastic gradient descent")
+    
+    # Define custom tick positions and labels
+    # tick_positions = [1, 10, 30, 100, 300, 1000, 3000, 10000, 20000]  # Explicit positions in Hz
+    # tick_labels = ['1 Hz', '10 Hz', '30 Hz', '100 Hz', '300 Hz', '1 kHz', '3 kHz', '10 kHz', '20 kHz']  # Custom labels
+
+    # plt.xticks(tick_positions, tick_labels)
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("Magnitude (dB)")
     plt.savefig("./figures/match"+str(n)+".png")
@@ -115,10 +155,10 @@ for n in pbar:
   loss = torch.zeros(NUM_OF_DELAYS, device=device)
   optimizer.zero_grad()
   for i in range(NUM_OF_DELAYS):
-    loss[i] = torch.nn.functional.mse_loss(20*torch.log10(pred_responses[i]), 20*torch.log10(target_responses[i]))
+    loss[i]= torch.nn.functional.mse_loss(20*torch.log10((pred_responses)), 20*torch.log10((target_responses)))
     loss[i].backward(retain_graph=True)
   optimizer.step()
   scheduler.step()
 
-  pbar.set_description(f"{loss[0].item():0.4e}")
+  pbar.set_description(f"{loss[i].item():0.4e}")
 

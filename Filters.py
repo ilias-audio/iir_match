@@ -2,14 +2,15 @@ import torch
 
 class RBJ_LowShelf:
     
-    def __init__(self, current_freq, cut_off, gain, q_factor=0.7071):
+    def __init__(self, current_freq, cut_off, gain, q_factor=0.7071, sample_rate = 48000):
         self.cut_off = cut_off
         self.current_freq = current_freq 
         self.gain = gain
         self.q_factor = q_factor
+        self.sample_rate = sample_rate
         self.set_linear_gain(gain)
         self.compute_response()
-
+        self.sos = torch.zeros((1,6))
 
     def set_linear_gain(self, gain):
         self.A = torch.pow(10.0,(gain/40.0))
@@ -29,16 +30,45 @@ class RBJ_LowShelf:
 
         self.response = self.A * (num / den)
 
+    def compute_sos(self):
+        w0 = 2.0 * torch.pi * (self.cut_off/self.sample_rate)
+        alpha = torch.sin(w0) / (2.0 * self.q_factor)
+        A = self.A
+        
+        b0 =     A*((A+1.) - (A-1.)*torch.cos(w0) + 2*torch.sqrt(A)*alpha )
+        b1 =  2.*A*((A-1.) - (A+1.)*torch.cos(w0)                         )
+        b2 =     A*((A+1.) - (A-1.)*torch.cos(w0) - 2*torch.sqrt(A)*alpha )
+        a0 =        (A+1.) + (A-1.)*torch.cos(w0) + 2*torch.sqrt(A)*alpha
+        a1 =   -2.*((A-1.) + (A+1.)*torch.cos(w0)                         )
+        a2 =        (A+1.) + (A-1.)*torch.cos(w0) - 2*torch.sqrt(A)*alpha
+
+        # Numerator
+        b0 /= a0
+        b1 /= a0
+        b2 /= a0
+        # Denumerator
+        
+        a1 /= a0
+        a2 /= a0
+        
+        a0 = torch.tensor(1.)
+        
+        self.sos[0,:] = torch.tensor([b0, b1, b2, a0, a1, a2])
+        
+        
+        
 
 class RBJ_HighShelf:
     
-    def __init__(self, current_freq, cut_off, gain, q_factor=0.7071):
+    def __init__(self, current_freq, cut_off, gain, q_factor=0.7071, sample_rate = 48000):
         self.cut_off = cut_off
         self.current_freq = current_freq 
         self.gain = gain
         self.q_factor = q_factor
+        self.sample_rate = sample_rate
         self.set_linear_gain(gain)
         self.compute_response()
+        self.sos = torch.zeros((1,6))
 
 
     def set_linear_gain(self, gain):
@@ -58,16 +88,45 @@ class RBJ_HighShelf:
         den =  torch.sqrt(den_real + den_img)
 
         self.response = self.A * (num / den)
+        
+        
+    def compute_sos(self):
+        w0 = 2.0 * torch.pi * (self.cut_off/self.sample_rate)
+        alpha = torch.sin(w0) / (2.0 * self.q_factor)
+        A = self.A
+        
+        b0 =    A*( (A+1.) + (A-1.)*torch.cos(w0) + 2*torch.sqrt(A)*alpha )
+        b1 = -2.*A*( (A-1.) + (A+1.)*torch.cos(w0)                   )
+        b2 =    A*( (A+1.) + (A-1.)*torch.cos(w0) - 2*torch.sqrt(A)*alpha )
+        a0 =        (A+1.) - (A-1.)*torch.cos(w0) + 2*torch.sqrt(A)*alpha
+        a1 =    2.*( (A-1.) - (A+1.)*torch.cos(w0)                   )
+        a2 =        (A+1.) - (A-1.)*torch.cos(w0) - 2*torch.sqrt(A)*alpha
+
+
+        # Numerator
+        b0 /= a0
+        b1 /= a0
+        b2 /= a0
+        # Denumerator
+        
+        a1 /= a0
+        a2 /= a0
+        
+        a0 = torch.tensor(1.)
+        
+        self.sos[0,:] = torch.tensor([b0, b1, b2, a0, a1, a2])
 
 
 class RBJ_Bell:
-    def __init__(self, current_freq, cut_off, gain, q_factor=0.7071):
+    def __init__(self, current_freq, cut_off, gain, q_factor=0.7071, sample_rate = 48000):
         self.cut_off = cut_off
         self.current_freq = current_freq 
         self.gain = gain
         self.q_factor = q_factor
+        self.sample_rate = sample_rate
         self.set_linear_gain(gain)
         self.compute_response()
+        self.sos = torch.zeros((1,6))
 
 
     def set_linear_gain(self, gain):
@@ -88,3 +147,28 @@ class RBJ_Bell:
         den =  torch.sqrt(den_real + den_img)
 
         self.response = (num / den)
+        
+    def compute_sos(self):
+        w0 = 2. * torch.pi * (self.cut_off/self.sample_rate)
+        alpha = torch.sin(w0) / (2.0 * self.q_factor)
+        A = self.A        
+        b0 =   1. + alpha*A
+        b1 =  -2.*torch.cos(w0)
+        b2 =   1. - alpha*A
+        a0 =   1. + alpha/A
+        a1 =  -2.*torch.cos(w0)
+        a2 =   1. - alpha/A
+
+
+        # Numerator
+        b0 /= a0
+        b1 /= a0
+        b2 /= a0
+        # Denumerator
+        a1 /= a0
+        a2 /= a0
+        
+        a0 = torch.tensor(1.)
+        
+        
+        self.sos[0,:] = torch.tensor([b0, b1, b2, a0, a1, a2])
