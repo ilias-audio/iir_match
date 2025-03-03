@@ -47,6 +47,7 @@ def sos_mag_response(F: torch.Tensor,     # Center frequencies (NUM_OF_DELAYS x 
         low_shelf = RBJ_LowShelf(Fs, F[:, 0], G[:, 0], Q[:, 0], sample_rate=Fs)
         low_shelf.compute_sos()
         sos = low_shelf.sos
+        print(sos.shape)
       elif i == NUM_OF_BANDS - 1:
         high_shelf = RBJ_HighShelf(Fs, F[:, -1], G[:, -1], Q[:, -1], sample_rate=Fs)
         high_shelf.compute_sos()
@@ -55,14 +56,14 @@ def sos_mag_response(F: torch.Tensor,     # Center frequencies (NUM_OF_DELAYS x 
         bell = RBJ_Bell(Fs, F[:, i], G[:, i], Q[:, i], sample_rate=Fs)
         bell.compute_sos()
         sos = torch.cat((sos, bell.sos), dim=0)
- 
-    return signal.sosfreqz(sos.numpy(), worN=2028, fs=Fs)
+    # print(sos.shape)
+    return signal.sosfreqz(sos.detach().numpy(), worN=2028, fs=Fs)
     
 
 ###############################################################################
 # LOAD FREQ RESPONSES
 ###############################################################################
-NUM_OF_DELAYS = 1
+NUM_OF_DELAYS = 2
 
 
 DELAYS = torch.randint(100, 2000, (NUM_OF_DELAYS, 1), device=device)
@@ -88,7 +89,7 @@ NUM_OF_ITER = 10000
 parameters = torch.nn.ParameterList()
 
 parameters.append(torch.rand(NUM_OF_BANDS,requires_grad=True, device=device, dtype=torch.float32)) # Common Freqs
-parameters.append(torch.rand(NUM_OF_DELAYS*NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # specific gains
+parameters.append(torch.rand(NUM_OF_BANDS*NUM_OF_DELAYS, requires_grad=True, device=device, dtype=torch.float32)) # Common gains
 parameters.append(torch.rand(NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # Common Q
 
 # parameters.append([
@@ -105,24 +106,24 @@ for n in pbar:
   # gain_params = torch.stack([param[1] for param in parameters]).view(NUM_OF_DELAYS, NUM_OF_BANDS)
   # q_params    = torch.stack([param[2] for param in parameters]).view(NUM_OF_DELAYS, NUM_OF_BANDS)
 
-  freq_params = parameters[0].unsqueeze(0).repeat(NUM_OF_DELAYS, 1)
-  gain_params = parameters[1].view(NUM_OF_DELAYS, NUM_OF_BANDS)
-  q_params = parameters[2].unsqueeze(0).repeat(NUM_OF_DELAYS, 1)
+  freq_params = torch.sigmoid(parameters[0].unsqueeze(0).repeat(NUM_OF_DELAYS, 1))
+  gain_params = torch.sigmoid(parameters[1].view(NUM_OF_DELAYS, NUM_OF_BANDS))
+  q_params = torch.sigmoid(parameters[2].unsqueeze(0).repeat(NUM_OF_DELAYS, 1))
 
   f_expanded = f.unsqueeze(0).repeat(NUM_OF_DELAYS, 1)
   f_expanded = f_expanded.T
 
   pred_responses = evaluate_mag_response(
     f_expanded,
-    frequency_denormalize(torch.sigmoid(freq_params)),
-    gain_denormalize(torch.sigmoid(gain_params)),
-    q_denormalize(torch.sigmoid(q_params))
+    frequency_denormalize((freq_params)),
+    gain_denormalize((gain_params)),
+    q_denormalize((q_params))
   )
   
   sos_freq, sos_mag = sos_mag_response(
-    frequency_denormalize(torch.sigmoid(freq_params)),
-    gain_denormalize(torch.sigmoid(gain_params)),
-    q_denormalize(torch.sigmoid(q_params)),
+    frequency_denormalize((freq_params)),
+    gain_denormalize((gain_params)),
+    q_denormalize((q_params)),
     SAMPLE_RATE
   )
 

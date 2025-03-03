@@ -14,6 +14,8 @@ class RBJ_LowShelf:
 
     def set_linear_gain(self, gain):
         self.A = torch.pow(10.0,(gain/40.0))
+        print(gain)
+        print(gain.shape)
 
     def compute_response(self):
         W = self.current_freq / self.cut_off
@@ -51,9 +53,12 @@ class RBJ_LowShelf:
         a1 /= a0
         a2 /= a0
         
-        a0 = torch.tensor(1.)
+        a0 /= a0
         
-        self.sos[0,:] = torch.tensor([b0, b1, b2, a0, a1, a2])
+        
+        print(b0.shape)
+        self.sos = torch.cat([[b0.unsqueeze(-1)], [b1.unsqueeze(-1)], [b2.unsqueeze(-1)], [a0.unsqueeze(-1)], [a1.unsqueeze(-1)], [a2.unsqueeze(-1)]])
+        print(self.sos.shape)
         
         
         
@@ -112,9 +117,10 @@ class RBJ_HighShelf:
         a1 /= a0
         a2 /= a0
         
-        a0 = torch.tensor(1.)
+        a0 /= a0
         
-        self.sos[0,:] = torch.tensor([b0, b1, b2, a0, a1, a2])
+        self.sos = torch.cat([b0, b1, b2, a0, a1, a2], dim=0)
+        print(self.sos.shape)
 
 
 class RBJ_Bell:
@@ -168,7 +174,8 @@ class RBJ_Bell:
         a1 /= a0
         a2 /= a0
         
-        a0 = torch.tensor(1.)
+        a0 /= a0
         
         
-        self.sos[0,:] = torch.tensor([b0, b1, b2, a0, a1, a2])
+        self.sos = torch.cat([b0, b1, b2, a0, a1, a2], dim=0)
+        print(self.sos.shape)
