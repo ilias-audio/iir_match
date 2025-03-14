@@ -14,8 +14,6 @@ class RBJ_LowShelf:
 
     def set_linear_gain(self, gain):
         self.A = torch.pow(10.0,(gain/40.0))
-        print(gain)
-        print(gain.shape)
 
     def compute_response(self):
         W = self.current_freq / self.cut_off

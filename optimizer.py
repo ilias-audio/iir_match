@@ -47,7 +47,7 @@ def sos_mag_response(F: torch.Tensor,     # Center frequencies (NUM_OF_DELAYS x 
         low_shelf = RBJ_LowShelf(Fs, F[:, 0], G[:, 0], Q[:, 0], sample_rate=Fs)
         low_shelf.compute_sos()
         sos = low_shelf.sos
-        print(sos.shape)
+        # print(sos.shape)
       elif i == NUM_OF_BANDS - 1:
         high_shelf = RBJ_HighShelf(Fs, F[:, -1], G[:, -1], Q[:, -1], sample_rate=Fs)
         high_shelf.compute_sos()
@@ -60,10 +60,23 @@ def sos_mag_response(F: torch.Tensor,     # Center frequencies (NUM_OF_DELAYS x 
     return signal.sosfreqz(sos.detach().numpy(), worN=2028, fs=Fs)
     
 
+
+def convert_proto_gain_to_delay(gamma, delays, fs):
+  # print(delays / fs)
+  # print(gamma.shape)
+  # print(gamma)
+  # print(delays.shape)
+
+  gain = gamma * (delays / fs)
+  # print(gain)
+  return gain
+  
+
+
 ###############################################################################
 # LOAD FREQ RESPONSES
 ###############################################################################
-NUM_OF_DELAYS = 2
+NUM_OF_DELAYS = 16
 
 
 DELAYS = torch.randint(100, 2000, (NUM_OF_DELAYS, 1), device=device)
@@ -83,13 +96,13 @@ target_responses = torch.pow(10.0, target_responses / 20.0)
 ###############################################################################
 # MAIN
 ###############################################################################
-NUM_OF_BANDS = 16
-NUM_OF_ITER = 10000
+NUM_OF_BANDS = 4
+NUM_OF_ITER = 2001
 
 parameters = torch.nn.ParameterList()
 
 parameters.append(torch.rand(NUM_OF_BANDS,requires_grad=True, device=device, dtype=torch.float32)) # Common Freqs
-parameters.append(torch.rand(NUM_OF_BANDS*NUM_OF_DELAYS, requires_grad=True, device=device, dtype=torch.float32)) # Common gains
+parameters.append(torch.rand(NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # Common gains
 parameters.append(torch.rand(NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # Common Q
 
 # parameters.append([
@@ -107,7 +120,7 @@ for n in pbar:
   # q_params    = torch.stack([param[2] for param in parameters]).view(NUM_OF_DELAYS, NUM_OF_BANDS)
 
   freq_params = torch.sigmoid(parameters[0].unsqueeze(0).repeat(NUM_OF_DELAYS, 1))
-  gain_params = torch.sigmoid(parameters[1].view(NUM_OF_DELAYS, NUM_OF_BANDS))
+  gain_params = torch.sigmoid(parameters[1])
   q_params = torch.sigmoid(parameters[2].unsqueeze(0).repeat(NUM_OF_DELAYS, 1))
 
   f_expanded = f.unsqueeze(0).repeat(NUM_OF_DELAYS, 1)
@@ -116,13 +129,13 @@ for n in pbar:
   pred_responses = evaluate_mag_response(
     f_expanded,
     frequency_denormalize((freq_params)),
-    gain_denormalize((gain_params)),
+    convert_proto_gain_to_delay(gain_denormalize((gain_params)), DELAYS, SAMPLE_RATE),
     q_denormalize((q_params))
   )
   
   sos_freq, sos_mag = sos_mag_response(
     frequency_denormalize((freq_params)),
-    gain_denormalize((gain_params)),
+    convert_proto_gain_to_delay(gain_denormalize((gain_params)), DELAYS, SAMPLE_RATE),
     q_denormalize((q_params)),
     SAMPLE_RATE
   )
@@ -139,7 +152,7 @@ for n in pbar:
     plt.clf()
     plt.semilogx(f.cpu(), 20 * np.log10(pred_responses.detach().cpu().numpy().T), label="Prediction")
     plt.semilogx(f.cpu(), 20 * np.log10(target_responses.detach().cpu().numpy().T), label="Target", linestyle='dotted')
-    plt.semilogx(sos_freq, 20 * np.log10(sos_mag), label="sos", linestyle='dotted')
+    # plt.semilogx(sos_freq, 20 * np.log10(sos_mag), label="sos", linestyle='dotted')
     # plt.plot(frequency_denormalize(torch.sigmoid(freq_params)).detach().cpu(), gain_denormalize(torch.sigmoid(gain_params)).detach().cpu().numpy(), 'o')
     plt.legend()
     # plt.title("Frequency response matching using stochastic gradient descent")
@@ -156,7 +169,7 @@ for n in pbar:
   loss = torch.zeros(NUM_OF_DELAYS, device=device)
   optimizer.zero_grad()
   for i in range(NUM_OF_DELAYS):
-    loss[i]= torch.nn.functional.mse_loss(20*torch.log10((pred_responses)), 20*torch.log10((target_responses)))
+    loss[i]= torch.nn.functional.mse_loss(((pred_responses)), (target_responses))
     loss[i].backward(retain_graph=True)
   optimizer.step()
   scheduler.step()
