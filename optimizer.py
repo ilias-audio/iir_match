@@ -76,7 +76,7 @@ def convert_proto_gain_to_delay(gamma, delays, fs):
 ###############################################################################
 # LOAD FREQ RESPONSES
 ###############################################################################
-NUM_OF_DELAYS = 16
+NUM_OF_DELAYS = 3
 
 
 DELAYS = torch.randint(100, 2000, (NUM_OF_DELAYS, 1), device=device)
@@ -97,7 +97,7 @@ target_responses = torch.pow(10.0, target_responses / 20.0)
 # MAIN
 ###############################################################################
 NUM_OF_BANDS = 4
-NUM_OF_ITER = 2001
+NUM_OF_ITER = 10001
 
 parameters = torch.nn.ParameterList()
 
@@ -166,13 +166,13 @@ for n in pbar:
     plt.ylabel("Magnitude (dB)")
     plt.savefig("./figures/match"+str(n)+".png")
 
-  loss = torch.zeros(NUM_OF_DELAYS, device=device)
+  loss = torch.zeros(1, device=device)
   optimizer.zero_grad()
-  for i in range(NUM_OF_DELAYS):
-    loss[i]= torch.nn.functional.mse_loss(((pred_responses)), (target_responses))
-    loss[i].backward(retain_graph=True)
+  # for i in range(NUM_OF_DELAYS):
+  loss = torch.nn.functional.mse_loss(20 * torch.log10((pred_responses)), 20 * torch.log10(target_responses))
+  loss.backward(retain_graph=False)
   optimizer.step()
   scheduler.step()
 
-  pbar.set_description(f"{loss[i].item():0.4e}")
+  pbar.set_description(f"{loss:0.4e}")
 
