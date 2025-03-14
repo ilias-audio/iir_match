@@ -51,9 +51,9 @@ class RBJ_LowShelf:
         a1 /= a0
         a2 /= a0
         
-        a0 = torch.tensor(1.)
+        a0 = torch.ones_like(b0)
         
-        self.sos[0,:] = torch.tensor([b0, b1, b2, a0, a1, a2])
+        self.sos = torch.stack([b0, b1, b2, a0, a1, a2], dim=1)
         
         
         
@@ -112,9 +112,9 @@ class RBJ_HighShelf:
         a1 /= a0
         a2 /= a0
         
-        a0 = torch.tensor(1.)
+        a0 = torch.ones_like(b0)
         
-        self.sos[0,:] = torch.tensor([b0, b1, b2, a0, a1, a2])
+        self.sos = torch.stack([b0, b1, b2, a0, a1, a2], dim=1)
 
 
 class RBJ_Bell:
@@ -168,7 +168,7 @@ class RBJ_Bell:
         a1 /= a0
         a2 /= a0
         
-        a0 = torch.tensor(1.)
+        a0 = torch.ones_like(b0)
         
         
-        self.sos[0,:] = torch.tensor([b0, b1, b2, a0, a1, a2])
+        self.sos = torch.stack([b0, b1, b2, a0, a1, a2], dim=1)
