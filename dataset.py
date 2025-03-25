@@ -31,7 +31,7 @@ def figure_1(rt_dataset, freq_dataset):
     plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: '%1.0f%%' % x))
     plt.xlabel("Reverberation Time (s)")
     plt.ylabel("Percentage")
-    plt.title("Histogram of Reverberation Times")
+    plt.title("Dataset Reverberation Times distribution")
     plt.savefig(os.path.join("figures", "figure_1.png"))
 
 def main():
