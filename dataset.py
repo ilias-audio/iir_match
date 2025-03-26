@@ -37,7 +37,7 @@ def figure_1(rt_dataset):
 
 
 def interpolate_dataset_response(rt_dataset, freq_dataset, N=24000):
-    all_freqs = np.linspace(np.log10(1), np.log10(24000), N)
+    all_freqs = np.linspace((1), (24000), N)
     print(all_freqs)
     new_dataset = np.zeros((N, rt_dataset.shape[1]))
     for i in range(rt_dataset.shape[1]):
@@ -51,7 +51,18 @@ def figure_2(rt_num, freq_dataset, rt_dataset, interpolated_dataset):
     plt.xlim((np.log10(1), 24000))
     plt.savefig(os.path.join("figures", "figure_2.png"))
 
-
+def figure_3(freq_dataset, rt_dataset):
+    '''Box Plot of RT values'''
+    plt.figure(figsize=(10, 8))
+    plt.boxplot(rt_dataset.T)
+    
+    x_ticks = [f"{int(freq/1000)}k" if freq > 1000 else str(int(freq)) for freq in freq_dataset]
+    x_ticks.insert(0, "")  # Insert an empty string as the first xtick
+    plt.xticks(range(len(freq_dataset) + 1), x_ticks, fontsize=8)  # Adjust the range accordingly
+    plt.title("Reverberation Time Values for Each Frequency")
+    plt.savefig(os.path.join("figures", "figure_3.png"))
+    
+    
 
 def main():
     print(os.getcwd())
@@ -61,6 +72,7 @@ def main():
     figure_1(rt_dataset)
     interpolated_dataset = interpolate_dataset_response(rt_dataset, freq_dataset)
     figure_2(3, freq_dataset, rt_dataset, interpolated_dataset)
+    figure_3(freq_dataset, rt_dataset)
     
     
     
