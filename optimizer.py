@@ -71,26 +71,38 @@ def convert_proto_gain_to_delay(gamma, delays, fs):
 # LOAD FREQ RESPONSES
 ###############################################################################
 NUM_OF_DELAYS = 3
-
-
 DELAYS = torch.randint(100, 2000, (NUM_OF_DELAYS, 1), device=device)
 DELAYS, _ = torch.sort(DELAYS, dim=0)
 
-target_matrix = scipy.io.loadmat("target_mag.mat")
+def load_target_mag():
+  target_matrix = scipy.io.loadmat("target_mag.mat")
+  f = torch.tensor(target_matrix.get('w'), dtype=torch.float32).squeeze().to(device)
+  target_response = torch.tensor(target_matrix.get('target_mag'), dtype=torch.float32).squeeze().to(device)
 
-f = torch.tensor(target_matrix.get('w'), dtype=torch.float32).squeeze().to(device)
-target_response = torch.tensor(target_matrix.get('target_mag'), dtype=torch.float32).squeeze().to(device)
+  DELAY_OF_EXAMPLE = 1500
+  RT_EXAMPLE = (-60 * DELAY_OF_EXAMPLE) / (SAMPLE_RATE * target_response)
 
-DELAY_OF_EXAMPLE = 1500
-RT_EXAMPLE = (-60 * DELAY_OF_EXAMPLE) / (SAMPLE_RATE * target_response)
+  target_responses = (-60 * DELAYS) / (SAMPLE_RATE * RT_EXAMPLE)
+  target_responses = torch.pow(10.0, target_responses / 20.0)
+  return f, target_responses
 
-target_responses = (-60 * DELAYS) / (SAMPLE_RATE * RT_EXAMPLE)
-target_responses = torch.pow(10.0, target_responses / 20.0)
+
+def load_dataset_mag(index):
+  rt_dataset = np.load("interpolated_dataset.npy")
+  target_responses = (-60 * DELAYS) / (SAMPLE_RATE * rt_dataset[:, index])
+  target_responses = torch.pow(10.0, target_responses / 20.0)
+  f = np.logspace(np.log10(1), np.log10(24000), rt_dataset.shape[0])
+  return torch.tensor(f, dtype=torch.float32), torch.tensor(target_responses, dtype=torch.float32)
+  
+f, target_responses = load_dataset_mag(3)
+
+
+
 
 ###############################################################################
 # MAIN
 ###############################################################################
-NUM_OF_BANDS = 4
+NUM_OF_BANDS = 6
 NUM_OF_ITER = 10001
 
 parameters = torch.nn.ParameterList()

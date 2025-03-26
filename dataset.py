@@ -71,7 +71,7 @@ def main():
     rt_dataset = import_rt_dataset(path)
     freq_dataset = dataset_freq()
     interpolated_freqs, interpolated_dataset = interpolate_dataset_response(freq_dataset, rt_dataset)
-    interpolated_dataset.tofile("interpolated_dataset.dat")
+    np.save("interpolated_dataset.npy", interpolated_dataset)
     
     figure_1(rt_dataset)
     figure_2(3, freq_dataset, rt_dataset, interpolated_freqs, interpolated_dataset)
