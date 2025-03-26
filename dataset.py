@@ -36,19 +36,19 @@ def figure_1(rt_dataset):
     plt.savefig(os.path.join("figures", "figure_1.png"))
 
 
-def interpolate_dataset_response(rt_dataset, freq_dataset, N=24000):
-    all_freqs = np.linspace((1), (24000), N)
-    print(all_freqs)
+def interpolate_dataset_response(freq_dataset, rt_dataset, N=2048):
+    new_freqs = np.logspace(np.log10(1), np.log10(24000), N)
+    print(new_freqs)
     new_dataset = np.zeros((N, rt_dataset.shape[1]))
     for i in range(rt_dataset.shape[1]):
-        new_dataset[:, i] = np.interp(all_freqs, freq_dataset, rt_dataset[:, i])
-    return new_dataset
+        new_dataset[:, i] = np.interp(new_freqs, freq_dataset, rt_dataset[:, i])
+    return new_freqs, new_dataset
     
-def figure_2(rt_num, freq_dataset, rt_dataset, interpolated_dataset):
+def figure_2(rt_num, freq_dataset, rt_dataset, interpolated_freqs, interpolated_dataset):
     plt.figure(figsize=(10, 8))
-    plt.semilogx(interpolated_dataset[:,rt_num])
+    plt.semilogx(interpolated_freqs, interpolated_dataset[:,rt_num])
     plt.semilogx(freq_dataset, rt_dataset[:,rt_num], 'o')
-    plt.xlim((np.log10(1), 24000))
+    # plt.xlim((np.log10(1), 24000))
     plt.savefig(os.path.join("figures", "figure_2.png"))
 
 def figure_3(freq_dataset, rt_dataset):
@@ -61,6 +61,7 @@ def figure_3(freq_dataset, rt_dataset):
     plt.xticks(range(len(freq_dataset) + 1), x_ticks, fontsize=8)  # Adjust the range accordingly
     plt.title("Reverberation Time Values for Each Frequency")
     plt.savefig(os.path.join("figures", "figure_3.png"))
+    # this should ideally be 1 per octave on the X-axis
     
     
 
@@ -69,9 +70,11 @@ def main():
     path = os.path.join("imports", "two-stage-RT-values.mat")
     rt_dataset = import_rt_dataset(path)
     freq_dataset = dataset_freq()
+    interpolated_freqs, interpolated_dataset = interpolate_dataset_response(freq_dataset, rt_dataset)
+    interpolated_dataset.tofile("interpolated_dataset.dat")
+    
     figure_1(rt_dataset)
-    interpolated_dataset = interpolate_dataset_response(rt_dataset, freq_dataset)
-    figure_2(3, freq_dataset, rt_dataset, interpolated_dataset)
+    figure_2(3, freq_dataset, rt_dataset, interpolated_freqs, interpolated_dataset)
     figure_3(freq_dataset, rt_dataset)
     
     
