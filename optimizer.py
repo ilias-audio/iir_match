@@ -6,10 +6,8 @@ import matplotlib.pyplot as plt
 from utilities import *
 import scipy.io
 import scipy.signal as signal
+import os 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu") # still too slow on GPU
-SAMPLE_RATE = 48000
 def evaluate_mag_response(
   x: torch.Tensor,     # Frequency vector
   F: torch.Tensor,     # Center frequencies (NUM_OF_DELAYS x NUM_OF_BANDS)
@@ -70,10 +68,6 @@ def convert_proto_gain_to_delay(gamma, delays, fs):
 ###############################################################################
 # LOAD FREQ RESPONSES
 ###############################################################################
-NUM_OF_DELAYS = 3
-DELAYS = torch.randint(100, 2000, (NUM_OF_DELAYS, 1), device=device)
-DELAYS, _ = torch.sort(DELAYS, dim=0)
-
 def load_target_mag():
   target_matrix = scipy.io.loadmat("target_mag.mat")
   f = torch.tensor(target_matrix.get('w'), dtype=torch.float32).squeeze().to(device)
@@ -94,68 +88,119 @@ def load_dataset_mag(index):
   f = np.logspace(np.log10(1), np.log10(24000), rt_dataset.shape[0])
   return torch.tensor(f, dtype=torch.float32), torch.tensor(target_responses, dtype=torch.float32)
   
-f, target_responses = load_dataset_mag(3)
 
 
-
+def response_to_rt(response, delay):
+  rt = (-60 * delay) / (SAMPLE_RATE * (20* torch.log10(response)))
+  # print(rt)
+  return rt
 
 ###############################################################################
 # MAIN
 ###############################################################################
-NUM_OF_BANDS = 6
-NUM_OF_ITER = 10001
 
-parameters = torch.nn.ParameterList()
-
-parameters.append(torch.rand(NUM_OF_BANDS,requires_grad=True, device=device, dtype=torch.float32)) # Common Freqs
-parameters.append(torch.rand(NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # Common gains
-parameters.append(torch.rand(NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # Common Q
+if __name__ == "__main__":
 
 
+  device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+  device = torch.device("cpu") # still too slow on GPU
+  SAMPLE_RATE = 48000
+  NUM_OF_DELAYS = 1
+  DELAYS = torch.randint(100, 2000, (NUM_OF_DELAYS, 1), device=device)
+  DELAYS, _ = torch.sort(DELAYS, dim=0)
 
-optimizer = torch.optim.Adam(parameters, lr=0.1)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, NUM_OF_ITER)
-pbar = tqdm(range(NUM_OF_ITER))
+  NUM_OF_BANDS = 32
+  NUM_OF_ITER = 10001
+  SIZE_OF_DATASET = 1000
+  trained_gains = torch.zeros((SIZE_OF_DATASET, NUM_OF_BANDS))
+  trained_frequencies = torch.zeros((SIZE_OF_DATASET, NUM_OF_BANDS))
+  trained_q = torch.zeros((SIZE_OF_DATASET, NUM_OF_BANDS))
 
-for n in pbar:  
+  rt_dataset = np.load("interpolated_dataset.npy")
+  rt_dataset = torch.tensor(rt_dataset.T)
 
-  freq_params = torch.sigmoid(parameters[0].unsqueeze(0).repeat(NUM_OF_DELAYS, 1))
-  gain_params = torch.sigmoid(parameters[1])
-  q_params = torch.sigmoid(parameters[2].unsqueeze(0).repeat(NUM_OF_DELAYS, 1))
 
-  f_expanded = f.unsqueeze(0).repeat(NUM_OF_DELAYS, 1)
-  f_expanded = f_expanded.T
 
-  pred_responses = evaluate_mag_response(
-    f_expanded,
-    frequency_denormalize((freq_params)),
-    convert_proto_gain_to_delay(gain_denormalize((gain_params)), DELAYS, SAMPLE_RATE),
-    q_denormalize((q_params))
-  )
-  
-  sos_freq, sos_mag = sos_mag_response(
-    frequency_denormalize((freq_params)),
-    convert_proto_gain_to_delay(gain_denormalize((gain_params)), DELAYS, SAMPLE_RATE),
-    q_denormalize((q_params)),
-    SAMPLE_RATE
-  )
+  for rt_index in range(1):
+    f, target_responses = load_dataset_mag(rt_index)
+    parameters = torch.nn.ParameterList()
 
-  if n % 1000 == 0:
-        
-    plt.clf()
-    plt.semilogx(f.cpu(), 20 * np.log10(pred_responses.detach().cpu().numpy().T), label="Prediction")
-    plt.semilogx(f.cpu(), 20 * np.log10(target_responses.detach().cpu().numpy().T), label="Target", linestyle='dotted')
-    plt.legend()
-    plt.xlabel("Frequency (Hz)")
-    plt.ylabel("Magnitude (dB)")
-    plt.savefig("./figures/match"+str(n)+".png")
+    parameters.append(torch.rand(NUM_OF_BANDS,requires_grad=True, device=device, dtype=torch.float32)) # Common Freqs
+    parameters.append(torch.zeros(NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # Common gains
+    parameters.append(torch.ones(NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # Common Q
 
-  loss = torch.zeros(1, device=device)
-  optimizer.zero_grad()
-  loss = torch.nn.functional.mse_loss(20 * torch.log10((pred_responses)), 20 * torch.log10(target_responses))
-  loss.backward(retain_graph=False)
-  optimizer.step()
-  scheduler.step()
 
-  pbar.set_description(f"{loss:0.4e}")
+    trained_rt = torch.zeros((SIZE_OF_DATASET,len(f)))
+    training_error = torch.zeros((SIZE_OF_DATASET, len(f)))
 
+    optimizer = torch.optim.Adam(parameters, lr=0.3)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, NUM_OF_ITER)
+    pbar = tqdm(range(NUM_OF_ITER))
+
+    for n in pbar:  
+
+      freq_params = torch.sigmoid(parameters[0].unsqueeze(0).repeat(NUM_OF_DELAYS, 1))
+      gain_params = torch.sigmoid(parameters[1])
+      q_params = torch.sigmoid(parameters[2].unsqueeze(0).repeat(NUM_OF_DELAYS, 1))
+
+      f_expanded = f.unsqueeze(0).repeat(NUM_OF_DELAYS, 1)
+      f_expanded = f_expanded.T
+
+      pred_responses = evaluate_mag_response(
+        f_expanded,
+        frequency_denormalize((freq_params)),
+        convert_proto_gain_to_delay(gain_denormalize((gain_params)), DELAYS, SAMPLE_RATE),
+        q_denormalize((q_params))
+      )
+      
+      sos_freq, sos_mag = sos_mag_response(
+        frequency_denormalize((freq_params)),
+        convert_proto_gain_to_delay(gain_denormalize((gain_params)), DELAYS, SAMPLE_RATE),
+        q_denormalize((q_params)),
+        SAMPLE_RATE
+      )
+
+      if n == NUM_OF_ITER-1:
+            
+        plt.clf()
+        plt.semilogx(f.cpu(), 20 * np.log10(pred_responses.detach().cpu().numpy().T), label="Prediction")
+        plt.semilogx(f.cpu(), 20 * np.log10(target_responses.detach().cpu().numpy().T), label="Target", linestyle='dotted')
+        plt.legend()
+        plt.xlabel("Frequency (Hz)")
+        plt.ylabel("Magnitude (dB)")
+        plt.savefig("./figures/match_rt"+str(rt_index)+".png")
+
+      # loss = torch.zeros(1, device=device)
+      optimizer.zero_grad()
+      loss = torch.nn.functional.l1_loss(20 * torch.log10((pred_responses[-1,:])), 20 * torch.log10(target_responses[-1,:]))
+      loss.backward(retain_graph=False)
+      optimizer.step()
+      scheduler.step()
+
+      pbar.set_description(f"{loss:0.4e}")
+
+    ## save trained parameters
+    trained_gains[rt_index, :] = convert_proto_gain_to_delay(gain_denormalize((gain_params)), DELAYS, SAMPLE_RATE)
+    trained_frequencies[rt_index, :] = frequency_denormalize((freq_params))
+    trained_q[rt_index, :]= q_denormalize((q_params))
+    trained_rt[rt_index, :] = response_to_rt(pred_responses[-1, :], DELAYS)
+    training_error[rt_index, :] = ((rt_dataset[rt_index,:] - trained_rt[rt_index, :]) / rt_dataset[rt_index,:]) * 100
+    # print("Error: ", training_error[rt_index, :])
+    # print("Error: ", max(training_error[rt_index, :]))
+    # print("Error: ", min(training_error[rt_index, :]))
+
+  np.save("trained_gains.npy", trained_gains.detach().cpu().numpy())
+  np.save("trained_frequencies.npy", trained_frequencies.detach().cpu().numpy())
+  np.save("trained_q.npy", trained_q.detach().cpu().numpy())
+  np.save("training_error.npy", training_error.detach().cpu().numpy())
+
+
+  # load error and compute probability
+  training_error = np.load("training_error.npy")
+  plt.clf()
+  plt.hist(training_error.flatten(), density=True, histtype='step', log=True, bins=SIZE_OF_DATASET // 100)
+  # plt.xlim(-100, 100)
+  plt.xlabel("Percentage Error")
+  plt.ylabel("Probability")
+  plt.title("T_{60} Error Distribution")
+  plt.savefig(os.path.join("figures", "figure_4.png"))
