@@ -20,7 +20,7 @@ def lin_denormalize(value, min, max):
   return value
 
 
-MIN_FREQ = 20.
+MIN_FREQ = 5.
 MAX_FREQ = 20000.
 
 def frequency_denormalize(f):
@@ -33,8 +33,8 @@ def frequency_normalize(f):
   max = torch.tensor(MAX_FREQ)
   return log_normalize(f, min, max)
 
-MAX_GAIN_DB =  0
-MIN_GAIN_DB = - 2500.
+MAX_GAIN_DB =  250
+MIN_GAIN_DB = - 250.
 
 def gain_denormalize(g):
   min = torch.tensor(MIN_GAIN_DB)
@@ -46,8 +46,8 @@ def gain_normalize(g):
   max = torch.tensor(MAX_GAIN_DB)
   return lin_normalize(g, min, max)
 
-MIN_Q = 0.1
-MAX_Q = 10.
+MIN_Q = 0.03
+MAX_Q = 80.
 
 def q_denormalize(q):
   min = torch.tensor(MIN_Q)

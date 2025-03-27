@@ -37,7 +37,7 @@ def figure_1(rt_dataset):
 
 
 def interpolate_dataset_response(freq_dataset, rt_dataset, N=2048):
-    new_freqs = np.logspace(np.log10(1), np.log10(24000), N)
+    new_freqs = np.logspace(np.log10(20), np.log10(20000), N)
     print(new_freqs)
     new_dataset = np.zeros((N, rt_dataset.shape[1]))
     for i in range(rt_dataset.shape[1]):
@@ -70,7 +70,7 @@ def main():
     path = os.path.join("imports", "two-stage-RT-values.mat")
     rt_dataset = import_rt_dataset(path)
     freq_dataset = dataset_freq()
-    interpolated_freqs, interpolated_dataset = interpolate_dataset_response(freq_dataset, rt_dataset)
+    interpolated_freqs, interpolated_dataset = interpolate_dataset_response(freq_dataset, rt_dataset, N=128)
     np.save("interpolated_dataset.npy", interpolated_dataset)
     
     figure_1(rt_dataset)

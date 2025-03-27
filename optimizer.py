@@ -32,6 +32,32 @@ def evaluate_mag_response(
 
   return response
 
+
+def indivual_mag_response( x: torch.Tensor,     # Frequency vector
+  F: torch.Tensor,     # Center frequencies (NUM_OF_DELAYS x NUM_OF_BANDS)
+  G: torch.Tensor,     # Gain values (NUM_OF_DELAYS x NUM_OF_BANDS)
+  Q: torch.Tensor      # Q values (NUM_OF_DELAYS x NUM_OF_BANDS)
+):
+  assert F.shape == G.shape == Q.shape, "All parameter arrays must have the same shape"
+  NUM_OF_DELAYS, NUM_OF_BANDS = F.shape
+  
+  # Initialize response tensor
+  response = torch.ones((NUM_OF_BANDS, len(x)), device=x.device)
+  
+  # Compute responses for each band
+  low_shelf_responses = RBJ_LowShelf(x, F[:, 0], G[:, 0], Q[:, 0]).response
+  bell_responses = torch.stack([RBJ_Bell(x, F[:, i], G[:, i], Q[:, i]).response for i in range(1, NUM_OF_BANDS - 1)], dim=1)
+  high_shelf_responses = RBJ_HighShelf(x, F[:, -1], G[:, -1], Q[:, -1]).response
+  
+  # Combine responses
+  response[0,:] *= low_shelf_responses.T.squeeze()
+  for i in range(1, NUM_OF_BANDS - 1):
+    response[i,:] *= bell_responses[:,i-1].T.squeeze()
+  response[-1, :] *= high_shelf_responses.T.squeeze()
+
+  return response
+
+
 def sos_mag_response(F: torch.Tensor,     # Center frequencies (NUM_OF_DELAYS x NUM_OF_BANDS)
   G: torch.Tensor,     # Gain values (NUM_OF_DELAYS x NUM_OF_BANDS)
   Q: torch.Tensor,      # Q values (NUM_OF_DELAYS x NUM_OF_BANDS)
@@ -85,7 +111,7 @@ def load_dataset_mag(index):
   rt_dataset = np.load("interpolated_dataset.npy")
   target_responses = (-60 * DELAYS) / (SAMPLE_RATE * rt_dataset[:, index])
   target_responses = torch.pow(10.0, target_responses / 20.0)
-  f = np.logspace(np.log10(1), np.log10(24000), rt_dataset.shape[0])
+  f = np.logspace(np.log10(20), np.log10(20000), rt_dataset.shape[0])
   return torch.tensor(f, dtype=torch.float32), torch.tensor(target_responses, dtype=torch.float32)
   
 
@@ -106,11 +132,11 @@ if __name__ == "__main__":
   device = torch.device("cpu") # still too slow on GPU
   SAMPLE_RATE = 48000
   NUM_OF_DELAYS = 1
-  DELAYS = torch.randint(100, 2000, (NUM_OF_DELAYS, 1), device=device)
+  DELAYS = torch.randint(200, 15000, (NUM_OF_DELAYS, 1), device=device)
   DELAYS, _ = torch.sort(DELAYS, dim=0)
 
-  NUM_OF_BANDS = 32
-  NUM_OF_ITER = 10001
+  NUM_OF_BANDS = 6
+  NUM_OF_ITER = 3001
   SIZE_OF_DATASET = 1000
   trained_gains = torch.zeros((SIZE_OF_DATASET, NUM_OF_BANDS))
   trained_frequencies = torch.zeros((SIZE_OF_DATASET, NUM_OF_BANDS))
@@ -121,19 +147,29 @@ if __name__ == "__main__":
 
 
 
-  for rt_index in range(1):
+  for rt_index in range(1000):
     f, target_responses = load_dataset_mag(rt_index)
+
     parameters = torch.nn.ParameterList()
 
-    parameters.append(torch.rand(NUM_OF_BANDS,requires_grad=True, device=device, dtype=torch.float32)) # Common Freqs
+    freq_values = np.ones(NUM_OF_BANDS)
+    freq_values[0:-2] = np.logspace(np.log10(20), np.log10(16000), NUM_OF_BANDS-2)
+    freq_values[0] = 1000
+    freq_values[-1] = 1000
+    
+    # print(freq_values)
+    parameters.append(frequency_normalize(torch.tensor(
+      freq_values,
+      requires_grad=True, device=device, dtype=torch.float32
+    ))) # Common Freqs
     parameters.append(torch.zeros(NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # Common gains
-    parameters.append(torch.ones(NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # Common Q
+    parameters.append(torch.zeros(NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # Common Q
 
 
     trained_rt = torch.zeros((SIZE_OF_DATASET,len(f)))
     training_error = torch.zeros((SIZE_OF_DATASET, len(f)))
 
-    optimizer = torch.optim.Adam(parameters, lr=0.3)
+    optimizer = torch.optim.Adam(parameters, lr=0.1)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, NUM_OF_ITER)
     pbar = tqdm(range(NUM_OF_ITER))
 
@@ -161,18 +197,26 @@ if __name__ == "__main__":
       )
 
       if n == NUM_OF_ITER-1:
+        individual_responses = indivual_mag_response(
+        f_expanded,
+        frequency_denormalize((freq_params)),
+        convert_proto_gain_to_delay(gain_denormalize((gain_params)), DELAYS, SAMPLE_RATE),
+        q_denormalize((q_params))
+      )
+
             
         plt.clf()
         plt.semilogx(f.cpu(), 20 * np.log10(pred_responses.detach().cpu().numpy().T), label="Prediction")
         plt.semilogx(f.cpu(), 20 * np.log10(target_responses.detach().cpu().numpy().T), label="Target", linestyle='dotted')
-        plt.legend()
+        plt.semilogx(f.cpu(), 20 * np.log10(individual_responses.detach().cpu().numpy().T), label="individual", linestyle='dotted', color= 'grey')
+        # plt.legend()
         plt.xlabel("Frequency (Hz)")
         plt.ylabel("Magnitude (dB)")
         plt.savefig("./figures/match_rt"+str(rt_index)+".png")
 
       # loss = torch.zeros(1, device=device)
       optimizer.zero_grad()
-      loss = torch.nn.functional.l1_loss(20 * torch.log10((pred_responses[-1,:])), 20 * torch.log10(target_responses[-1,:]))
+      loss = torch.nn.functional.mse_loss(20 * torch.log10((pred_responses[-1,:])), 20 * torch.log10(target_responses[-1,:]))
       loss.backward(retain_graph=False)
       optimizer.step()
       scheduler.step()
