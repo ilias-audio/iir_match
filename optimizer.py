@@ -71,7 +71,6 @@ def sos_mag_response(F: torch.Tensor,     # Center frequencies (NUM_OF_DELAYS x 
         low_shelf = RBJ_LowShelf(Fs, F[:, 0], G[:, 0], Q[:, 0], sample_rate=Fs)
         low_shelf.compute_sos()
         sos = low_shelf.sos
-        # print(sos.shape)
       elif i == NUM_OF_BANDS - 1:
         high_shelf = RBJ_HighShelf(Fs, F[:, -1], G[:, -1], Q[:, -1], sample_rate=Fs)
         high_shelf.compute_sos()
@@ -80,8 +79,7 @@ def sos_mag_response(F: torch.Tensor,     # Center frequencies (NUM_OF_DELAYS x 
         bell = RBJ_Bell(Fs, F[:, i], G[:, i], Q[:, i], sample_rate=Fs)
         bell.compute_sos()
         sos = torch.cat((sos, bell.sos), dim=0)
-    # print(sos.shape)
-    return signal.sosfreqz(sos.detach().numpy(), worN=2028, fs=Fs)
+    return signal.sosfreqz(sos.detach().cpu().numpy(), worN=2028, fs=Fs)
     
 
 
@@ -94,7 +92,7 @@ def convert_proto_gain_to_delay(gamma, delays, fs):
 ###############################################################################
 # LOAD FREQ RESPONSES
 ###############################################################################
-def load_target_mag():
+def load_target_mag(device):
   target_matrix = scipy.io.loadmat("target_mag.mat")
   f = torch.tensor(target_matrix.get('w'), dtype=torch.float32).squeeze().to(device)
   target_response = torch.tensor(target_matrix.get('target_mag'), dtype=torch.float32).squeeze().to(device)
@@ -107,18 +105,17 @@ def load_target_mag():
   return f, target_responses
 
 
-def load_dataset_mag(index):
+def load_dataset_mag(index, device):
   rt_dataset = np.load("interpolated_dataset.npy")
-  target_responses = (-60 * DELAYS) / (SAMPLE_RATE * rt_dataset[:, index])
+  target_responses = (-60 * DELAYS.cpu()) / (SAMPLE_RATE * rt_dataset[:, index])
   target_responses = torch.pow(10.0, target_responses / 20.0)
   f = np.logspace(np.log10(20), np.log10(20000), rt_dataset.shape[0])
-  return torch.tensor(f, dtype=torch.float32), torch.tensor(target_responses, dtype=torch.float32)
+  return torch.tensor(f, dtype=torch.float32, device=device), torch.tensor(target_responses, dtype=torch.float32, device=device)
   
 
 
 def response_to_rt(response, delay):
   rt = (-60 * delay) / (SAMPLE_RATE * (20* torch.log10(response)))
-  # print(rt)
   return rt
 
 ###############################################################################
@@ -243,7 +240,6 @@ if __name__ == "__main__":
   training_error = np.load("training_error.npy")
   plt.clf()
   plt.hist(training_error.flatten(), density=True, histtype='step', log=True, bins=SIZE_OF_DATASET // 100)
-  # plt.xlim(-100, 100)
   plt.xlabel("Percentage Error")
   plt.ylabel("Probability")
   plt.title("T_{60} Error Distribution")
