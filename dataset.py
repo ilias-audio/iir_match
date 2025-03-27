@@ -38,7 +38,6 @@ def figure_1(rt_dataset):
 
 def interpolate_dataset_response(freq_dataset, rt_dataset, N=2048):
     new_freqs = np.logspace(np.log10(20), np.log10(20000), N)
-    print(new_freqs)
     new_dataset = np.zeros((N, rt_dataset.shape[1]))
     for i in range(rt_dataset.shape[1]):
         new_dataset[:, i] = np.interp(new_freqs, freq_dataset, rt_dataset[:, i])
@@ -63,10 +62,22 @@ def figure_3(freq_dataset, rt_dataset):
     plt.savefig(os.path.join("figures", "figure_3.png"))
     # this should ideally be 1 per octave on the X-axis
     
-    
+
+def figure_4(freq_dataset, rt_dataset):
+    '''export the median value of the RT dataset'''
+    median_rt = np.median(rt_dataset, axis=1)
+    print(median_rt.shape)
+    plt.figure(figsize=(10, 8))
+    plt.semilogx(freq_dataset, median_rt, 'o', label="Median RT")
+    plt.xlabel("Frequency (Hz)")
+    plt.ylabel("Median Dataset T$_{60}$ (s)")
+    plt.title("Median RT values for each frequency")
+    plt.savefig(os.path.join("figures", "figure_4.png"))
+    np.save("median_rt.npy", median_rt)
+
+
 
 def main():
-    print(os.getcwd())
     path = os.path.join("imports", "two-stage-RT-values.mat")
     rt_dataset = import_rt_dataset(path)
     freq_dataset = dataset_freq()
@@ -76,6 +87,8 @@ def main():
     figure_1(rt_dataset)
     figure_2(3, freq_dataset, rt_dataset, interpolated_freqs, interpolated_dataset)
     figure_3(freq_dataset, rt_dataset)
+    figure_4(freq_dataset, rt_dataset)
+
     
     
     
