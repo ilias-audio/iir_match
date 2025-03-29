@@ -58,3 +58,8 @@ def q_normalize(q):
   min = torch.tensor(MIN_Q)
   max = torch.tensor(MAX_Q)
   return log_normalize(q, min, max)
+
+
+def convert_proto_gain_to_delay(gamma, delays, fs):
+  gain = gamma * (delays / fs)
+  return gain.T

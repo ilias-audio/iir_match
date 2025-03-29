@@ -7,9 +7,9 @@ if __name__ == "__main__":
 
     ######### TOP LEVEL PARAMETERS ###########
     SAMPLE_RATE = 48000
-    NUM_OF_DELAYS = 1
+    NUM_OF_DELAYS = 2
     NUM_OF_BANDS = 6
-    NUM_OF_ITER = 301
+    NUM_OF_ITER = 3001
     INTERPOLATION_SIZE = 128
     ##########################################
 

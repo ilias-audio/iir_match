@@ -8,6 +8,8 @@ import scipy.io
 import scipy.signal as signal
 import os 
 
+
+
 def evaluate_mag_response(
   x: torch.Tensor,     # Frequency vector
   F: torch.Tensor,     # Center frequencies (NUM_OF_DELAYS x NUM_OF_BANDS)
@@ -90,7 +92,7 @@ def convert_proto_gain_to_delay(gamma, delays, fs):
 
 
 ###############################################################################
-# LOAD FREQ RESPONSES
+# LOAD FREQ RESPONSES those are utils
 ###############################################################################
 def load_target_mag(device):
   target_matrix = scipy.io.loadmat("target_mag.mat")
@@ -105,8 +107,8 @@ def load_target_mag(device):
   return f, target_responses
 
 
-def load_dataset_mag(index, device):
-  rt_dataset = np.load("interpolated_dataset.npy")
+def load_dataset_mag(index,`` device):
+  rt_dataset = np.load(os.path.join("data", "interpolated_dataset.npy")) # should have the interpolation shape in the name
   target_responses = (-60 * DELAYS.cpu()) / (SAMPLE_RATE * rt_dataset[:, index])
   target_responses = torch.pow(10.0, target_responses / 20.0)
   f = np.logspace(np.log10(20), np.log10(20000), rt_dataset.shape[0])
@@ -122,56 +124,54 @@ def response_to_rt(response, delay):
 # MAIN
 ###############################################################################
 
+class MatchEQ:
+  def __init__(self, device , num_of_iter, num_of_bands, num_of_delays, sample_rate):
+    self.sample_rate = sample_rate
+    self.device = torch.device(device)
+    self.num_of_bands = num_of_bands
+    self.num_of_delays = num_of_delays
+    self.min_delay_in_samples = int()
+    self.max_delay_in_samples = 15000
+    self.num_of_iter = num_of_iter
+    self.delays = torch.sort(torch.randint(self.min_delay_in_samples, self.max_delay_in_samples, (self.num_of_delays, 1), device=self.device), dim=0)
+
+
+
+
+
 if __name__ == "__main__":
 
+  device = "cuda" if torch.cuda.is_available() else "cpu"
 
-  device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-  device = torch.device("cpu") # still too slow on GPU
-  SAMPLE_RATE = 48000
-  NUM_OF_DELAYS = 1
-  DELAYS = torch.randint(200, 15000, (NUM_OF_DELAYS, 1), device=device)
-  DELAYS, _ = torch.sort(DELAYS, dim=0)
+  SAMPLE_RATE     = 48000
+  NUM_OF_DELAYS   = 1
+  NUM_OF_BANDS    = 6
+  NUM_OF_ITER     = 301
 
-  NUM_OF_BANDS = 6
-  NUM_OF_ITER = 3001
-  SIZE_OF_DATASET = 1000
-  trained_gains = torch.zeros((SIZE_OF_DATASET, NUM_OF_BANDS))
-  trained_frequencies = torch.zeros((SIZE_OF_DATASET, NUM_OF_BANDS))
-  trained_q = torch.zeros((SIZE_OF_DATASET, NUM_OF_BANDS))
+  MatchEQ = MatchEQ(device, NUM_OF_ITER, NUM_OF_BANDS, NUM_OF_DELAYS, SAMPLE_RATE)
+  Dataset = Dataloader(os.join("data","interpolated_dataset.npy"), device)
+  
+  trained_gains = torch.zeros((SIZE_OF_DATASET, NUM_OF_BANDS), device=device)
+  trained_frequencies = torch.zeros((SIZE_OF_DATASET, NUM_OF_BANDS), device=device)
+  trained_q = torch.zeros((SIZE_OF_DATASET, NUM_OF_BANDS), device=device)
+  training_error = torch.zeros((SIZE_OF_DATASET, len(rt_dataset[0])), device=device)
+  
+  
+  import concurrent.futures
 
-  rt_dataset = np.load("interpolated_dataset.npy")
-  rt_dataset = torch.tensor(rt_dataset.T)
+  def process_rt_index(rt_index):
+    f, target_responses = load_dataset_mag(rt_index, device)
 
+  
 
+    trained_rt = torch.zeros((len(f)), device=device)
+    training_error = torch.zeros((len(f)), device=device)
 
-  for rt_index in range(1000):
-    f, target_responses = load_dataset_mag(rt_index)
+    # optimizer = torch.optim.Adam(parameters, lr=0.1)
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, NUM_OF_ITER)
+    pbar = tqdm(range(NUM_OF_ITER), desc=f"RT Index {rt_index}")
 
-    parameters = torch.nn.ParameterList()
-
-    freq_values = np.ones(NUM_OF_BANDS)
-    freq_values[0:-2] = np.logspace(np.log10(20), np.log10(16000), NUM_OF_BANDS-2)
-    freq_values[0] = 1000
-    freq_values[-1] = 1000
-    
-    # print(freq_values)
-    parameters.append(frequency_normalize(torch.tensor(
-      freq_values,
-      requires_grad=True, device=device, dtype=torch.float32
-    ))) # Common Freqs
-    parameters.append(torch.zeros(NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # Common gains
-    parameters.append(torch.zeros(NUM_OF_BANDS, requires_grad=True, device=device, dtype=torch.float32)) # Common Q
-
-
-    trained_rt = torch.zeros((SIZE_OF_DATASET,len(f)))
-    training_error = torch.zeros((SIZE_OF_DATASET, len(f)))
-
-    optimizer = torch.optim.Adam(parameters, lr=0.1)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, NUM_OF_ITER)
-    pbar = tqdm(range(NUM_OF_ITER))
-
-    for n in pbar:  
-
+    for n in pbar:
       freq_params = torch.sigmoid(parameters[0].unsqueeze(0).repeat(NUM_OF_DELAYS, 1))
       gain_params = torch.sigmoid(parameters[1])
       q_params = torch.sigmoid(parameters[2].unsqueeze(0).repeat(NUM_OF_DELAYS, 1))
@@ -185,50 +185,47 @@ if __name__ == "__main__":
         convert_proto_gain_to_delay(gain_denormalize((gain_params)), DELAYS, SAMPLE_RATE),
         q_denormalize((q_params))
       )
-      
-      sos_freq, sos_mag = sos_mag_response(
-        frequency_denormalize((freq_params)),
-        convert_proto_gain_to_delay(gain_denormalize((gain_params)), DELAYS, SAMPLE_RATE),
-        q_denormalize((q_params)),
-        SAMPLE_RATE
-      )
 
-      if n == NUM_OF_ITER-1:
+      if n == NUM_OF_ITER - 1:
         individual_responses = indivual_mag_response(
-        f_expanded,
-        frequency_denormalize((freq_params)),
-        convert_proto_gain_to_delay(gain_denormalize((gain_params)), DELAYS, SAMPLE_RATE),
-        q_denormalize((q_params))
-      )
+          f_expanded,
+          frequency_denormalize((freq_params)),
+          convert_proto_gain_to_delay(gain_denormalize((gain_params)), DELAYS, SAMPLE_RATE),
+          q_denormalize((q_params))
+        )
 
-            
-        plt.clf()
-        plt.semilogx(f.cpu(), 20 * np.log10(pred_responses.detach().cpu().numpy().T), label="Prediction")
-        plt.semilogx(f.cpu(), 20 * np.log10(target_responses.detach().cpu().numpy().T), label="Target", linestyle='dotted')
-        plt.semilogx(f.cpu(), 20 * np.log10(individual_responses.detach().cpu().numpy().T), label="individual", linestyle='dotted', color= 'grey')
-        # plt.legend()
-        plt.xlabel("Frequency (Hz)")
-        plt.ylabel("Magnitude (dB)")
-        plt.savefig("./figures/match_rt"+str(rt_index)+".png")
+        fig, ax = plt.subplots()
+        ax.semilogx(f.cpu(), 20 * np.log10(pred_responses.detach().cpu().numpy().T), label="Prediction")
+        ax.semilogx(f.cpu(), 20 * np.log10(target_responses.detach().cpu().numpy().T), label="Target", linestyle='dotted')
+        ax.semilogx(f.cpu(), 20 * np.log10(individual_responses.detach().cpu().numpy().T), label="individual", linestyle='dotted', color='grey')
+        ax.set_xlabel("Frequency (Hz)")
+        ax.set_ylabel("Magnitude (dB)")
+        fig.savefig(f"./figures/match_rt{rt_index}.png")
+        plt.close(fig)
 
-      # loss = torch.zeros(1, device=device)
       optimizer.zero_grad()
-      loss = torch.nn.functional.mse_loss(20 * torch.log10((pred_responses[-1,:])), 20 * torch.log10(target_responses[-1,:]))
+      loss = torch.nn.functional.mse_loss(20 * torch.log10((pred_responses[-1, :])), 20 * torch.log10(target_responses[-1, :]))
       loss.backward(retain_graph=False)
       optimizer.step()
       scheduler.step()
 
-      pbar.set_description(f"{loss:0.4e}")
-
-    ## save trained parameters
     trained_gains[rt_index, :] = convert_proto_gain_to_delay(gain_denormalize((gain_params)), DELAYS, SAMPLE_RATE)
     trained_frequencies[rt_index, :] = frequency_denormalize((freq_params))
-    trained_q[rt_index, :]= q_denormalize((q_params))
-    trained_rt[rt_index, :] = response_to_rt(pred_responses[-1, :], DELAYS)
-    training_error[rt_index, :] = ((rt_dataset[rt_index,:] - trained_rt[rt_index, :]) / rt_dataset[rt_index,:]) * 100
-    # print("Error: ", training_error[rt_index, :])
-    # print("Error: ", max(training_error[rt_index, :]))
-    # print("Error: ", min(training_error[rt_index, :]))
+    trained_q[rt_index, :] = q_denormalize((q_params))
+    trained_rt[:] = response_to_rt(pred_responses[-1, :], DELAYS)
+    training_error[:] = ((rt_dataset[rt_index, :] - trained_rt[:]) / rt_dataset[rt_index, :]) * 100
+
+    return rt_index, trained_gains[rt_index, :], trained_frequencies[rt_index, :], trained_q[rt_index, :], training_error[:]
+
+
+  with concurrent.futures.ThreadPoolExecutor() as executor:
+    results = list(executor.map(process_rt_index, range(1000)))
+
+  for rt_index, gains, frequencies, q_values, errors in results:
+    trained_gains[rt_index, :] = gains
+    trained_frequencies[rt_index, :] = frequencies
+    trained_q[rt_index, :] = q_values
+    training_error[rt_index, :] = errors
 
   np.save("trained_gains.npy", trained_gains.detach().cpu().numpy())
   np.save("trained_frequencies.npy", trained_frequencies.detach().cpu().numpy())
