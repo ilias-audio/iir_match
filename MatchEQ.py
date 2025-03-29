@@ -62,8 +62,9 @@ class MatchEQ:
             self.optimizer.zero_grad()
 
             pred_response = self.calculate_predicted_response()
+            pred_response_dB = 20. * torch.log10(pred_response)
 
-            loss = self.loss_function(self.responses_dataset[dataset_index, :,:], pred_response)
+            loss = self.loss_function(self.responses_dataset[dataset_index, :,:], pred_response_dB)
 
             loss.backward()
 
@@ -71,7 +72,6 @@ class MatchEQ:
             self.scheduler.step()
 
             pbar.set_postfix({"loss": loss.item()})
-
 
     def calculate_predicted_response(self):
         self.eq_parameters_freqs = self.parameter_to_frequency()
@@ -100,4 +100,21 @@ class MatchEQ:
         q_params = torch.sigmoid(self.parameters[2].unsqueeze(1).repeat(1, self.num_of_delays))
         return q_denormalize(q_params)
     
-    
+    def plot_training_results(self, dataset_index: int):
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+        fig, axs = plt.subplots(figsize=(10, 10))
+
+        target_response_dB = self.responses_dataset[dataset_index,:,:].cpu().numpy()
+        pred_response_dB = 20. * np.log10(self.calculate_predicted_response().detach().cpu().numpy())
+        
+        # Plot frequency response
+        axs.semilogx(self.dataset_freqs.cpu().numpy(), target_response_dB, label="Target", linestyle='dotted')
+        axs.semilogx(self.dataset_freqs.cpu().numpy(), pred_response_dB, label="Prediction")
+        axs.set_title("Frequency Response")
+        axs.set_xlabel("Frequency (Hz)")
+        axs.set_ylabel("Magnitude (dB)")
+        axs.legend()
+        plt.tight_layout()
+        plt.savefig(f"./figures/match_rt_{dataset_index}.png")

@@ -7,9 +7,9 @@ if __name__ == "__main__":
 
     ######### TOP LEVEL PARAMETERS ###########
     SAMPLE_RATE = 48000
-    NUM_OF_DELAYS = 2
-    NUM_OF_BANDS = 6
-    NUM_OF_ITER = 3001
+    NUM_OF_DELAYS = 100
+    NUM_OF_BANDS = 31
+    NUM_OF_ITER = 3000
     INTERPOLATION_SIZE = 128
     ##########################################
 
@@ -18,9 +18,12 @@ if __name__ == "__main__":
     RT_Dataset = Dataloader.Dataloader(raw_dataset_path, INTERPOLATION_SIZE)
 
     # Define the optimizer 
-    EQ_Optimizer = MatchEQ.MatchEQ(RT_Dataset, NUM_OF_ITER, NUM_OF_BANDS, NUM_OF_DELAYS, SAMPLE_RATE, "cuda")
+    EQ_Optimizer = MatchEQ.MatchEQ(RT_Dataset, NUM_OF_ITER, NUM_OF_BANDS, NUM_OF_DELAYS, SAMPLE_RATE, "cpu")
 
     EQ_Optimizer.train(0)
     # Save the optimizer state
+    EQ_Optimizer.plot_training_results(0)
+
+
 
     
