@@ -20,8 +20,8 @@ def lin_denormalize(value, min, max):
   return value
 
 
-MIN_FREQ = 5.
-MAX_FREQ = 20000.
+MIN_FREQ = 20.
+MAX_FREQ = 18000.
 
 def frequency_denormalize(f):
   min = torch.tensor(MIN_FREQ)

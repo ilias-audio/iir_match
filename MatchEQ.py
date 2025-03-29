@@ -5,7 +5,7 @@ from utilities import gain_denormalize, q_denormalize
 from utilities import convert_proto_gain_to_delay
 from Filters import evaluate_mag_response
 from tqdm import tqdm
-
+import os
 
 class MatchEQ:
     def __init__(self, RT_Dataset: Dataloader , num_of_iter: int, num_of_bands: int, num_of_delays: int, sample_rate: int, device: str):
@@ -34,8 +34,8 @@ class MatchEQ:
 
     def init_training_parameters(self):
         self.parameters = torch.nn.ParameterList()
-        init_min_freq = torch.log(torch.tensor(20.))
-        init_max_freq = torch.log(torch.tensor(16000.))
+        init_min_freq = torch.log(torch.tensor(5.))
+        init_max_freq = torch.log(torch.tensor(20000.))
 
         freq_values = torch.ones(self.num_of_bands, requires_grad=False, device=self.device, dtype=torch.float32)
         freq_values[0:-2] = torch.logspace(init_min_freq, init_max_freq, self.num_of_bands-2)
@@ -52,7 +52,7 @@ class MatchEQ:
         assert self.parameters[2].shape == torch.Size([self.num_of_bands]), f"Q values should be a column vector, but got {self.parameters[2].shape}"
     
     def setup_optimizer(self):
-        self.optimizer = torch.optim.Adam(self.parameters, lr=0.1)
+        self.optimizer = torch.optim.Adam(self.parameters, lr=0.3)
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, self.num_of_iter)
 
     def train(self, dataset_index: int):
@@ -72,6 +72,12 @@ class MatchEQ:
             self.scheduler.step()
 
             pbar.set_postfix({"loss": loss.item()})
+        
+        # print the trained parameters
+        print(f"Trained Frequencies: {self.eq_parameters_freqs.data}")
+        print(f"Trained Gains: {self.eq_parameters_gains.data}")
+        print(f"Trained Q: {self.eq_parameters_q.data}")
+        print(f"Trained Delays: {self.delays.data}")
 
     def calculate_predicted_response(self):
         self.eq_parameters_freqs = self.parameter_to_frequency()
@@ -104,6 +110,7 @@ class MatchEQ:
         import matplotlib.pyplot as plt
         import numpy as np
 
+
         fig, axs = plt.subplots(figsize=(10, 10))
 
         target_response_dB = self.responses_dataset[dataset_index,:,:].cpu().numpy()
@@ -118,3 +125,18 @@ class MatchEQ:
         axs.legend()
         plt.tight_layout()
         plt.savefig(f"./figures/match_rt_{dataset_index}.png")
+
+    def save_trained_parameters(self, dataset_index: int):
+        # Create a folder for the dataset_index if it doesn't exist
+        folder_name = f"dataset_{dataset_index}"
+        os.makedirs(folder_name, exist_ok=True)
+
+        # Save the trained parameters in the folder
+        torch.save(self.eq_parameters_freqs, os.path.join(folder_name, f"trained_frequencies_{dataset_index}.pt"))
+        torch.save(self.eq_parameters_gains, os.path.join(folder_name, f"trained_gains_{dataset_index}.pt"))
+        torch.save(self.eq_parameters_q, os.path.join(folder_name, f"trained_q_{dataset_index}.pt"))
+        torch.save(self.delays, os.path.join(folder_name, f"trained_delays_{dataset_index}.pt"))
+
+        pred_response_dB = 20. * torch.log10(self.calculate_predicted_response().detach().cpu())
+        torch.save(pred_response_dB, os.path.join(folder_name, f"pred_response_{dataset_index}.pt"))
+        torch.save(self.dataset_freqs, os.path.join(folder_name, f"pred_freqs_{dataset_index}.pt"))
