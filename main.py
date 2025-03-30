@@ -19,9 +19,9 @@ if __name__ == "__main__":
     SAMPLE_RATE = 48000
     NUM_OF_DELAYS = 1
     NUM_OF_BANDS = 12
-    NUM_OF_ITER = 101
+    NUM_OF_ITER = 10000
     INTERPOLATION_SIZE = 128
-    NUM_OF_RT = 10
+    NUM_OF_RT = 100
     ##########################################
 
     # Load dataset and interpolate data to a bigger size
@@ -39,8 +39,28 @@ if __name__ == "__main__":
     Results_Analyzer = Analyzer.Analyzer("dataset_")
     Results_Analyzer.load_responses(NUM_OF_RT, NUM_OF_DELAYS)
 
+    Results_Analyzer.compute_relative_error(RT_Dataset)
+
     print(Results_Analyzer.trained_frequencies.shape)
     print(Results_Analyzer.trained_responses.shape)
+    print(Results_Analyzer.trained_rt.shape)
+
+    print(Results_Analyzer.trained_rt[0,:,0].shape)
+    print(RT_Dataset.dataset[:,0].shape)
+
+    # compare the trained responses to the RT_Dataset
+    #reduce dataset to 31 values 
+
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    data = np.interp(RT_Dataset.dataset_freqs, RT_Dataset.freqs, Results_Analyzer.trained_rt[0,:,0].cpu().numpy())
+    plt.figure(figsize=(10, 10))
+    plt.semilogx(RT_Dataset.dataset_freqs, data, label="Trained Response")
+    plt.semilogx(RT_Dataset.freqs, RT_Dataset.dataset[:,0], label="RT Dataset")
+    plt.legend()
+    plt.savefig(f"trained_vs_RT_{0}.png")
 
 
     # evaluate each responses at the frequency of the RT_Dataset

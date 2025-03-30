@@ -116,9 +116,7 @@ def load_dataset_mag(index,`` device):
   
 
 
-def response_to_rt(response, delay):
-  rt = (-60 * delay) / (SAMPLE_RATE * (20* torch.log10(response)))
-  return rt
+
 
 ###############################################################################
 # MAIN

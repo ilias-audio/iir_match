@@ -20,8 +20,8 @@ def lin_denormalize(value, min, max):
   return value
 
 
-MIN_FREQ = 20.
-MAX_FREQ = 18000.
+MIN_FREQ = 5.
+MAX_FREQ = 19500.
 
 def frequency_denormalize(f):
   min = torch.tensor(MIN_FREQ)
@@ -47,7 +47,7 @@ def gain_normalize(g):
   return lin_normalize(g, min, max)
 
 MIN_Q = 0.03
-MAX_Q = 80.
+MAX_Q = 40.
 
 def q_denormalize(q):
   min = torch.tensor(MIN_Q)
@@ -61,5 +61,9 @@ def q_normalize(q):
 
 
 def convert_proto_gain_to_delay(gamma, delays, fs):
-  gain = gamma * (delays / fs)
-  return gain.T
+  gain_dB = gamma * (delays / fs)
+  return gain_dB.T
+
+def convert_response_to_rt(response_dB, delay, sample_rate):
+  rt = (-60 * delay) / (sample_rate * response_dB)
+  return rt

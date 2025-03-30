@@ -2,7 +2,7 @@ import torch
 from Dataloader import Dataloader
 from utilities import frequency_normalize, frequency_denormalize 
 from utilities import gain_denormalize, q_denormalize
-from utilities import convert_proto_gain_to_delay
+from utilities import convert_proto_gain_to_delay, convert_response_to_rt
 from Filters import evaluate_mag_response
 from tqdm import tqdm
 import os
@@ -52,7 +52,7 @@ class MatchEQ:
         assert self.parameters[2].shape == torch.Size([self.num_of_bands]), f"Q values should be a column vector, but got {self.parameters[2].shape}"
     
     def setup_optimizer(self):
-        self.optimizer = torch.optim.Adam(self.parameters, lr=0.3)
+        self.optimizer = torch.optim.Adam(self.parameters, lr=0.1)
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, self.num_of_iter)
 
     def train(self, dataset_index: int):
@@ -138,5 +138,9 @@ class MatchEQ:
         torch.save(self.delays, os.path.join(folder_name, f"trained_delays_{dataset_index}.pt"))
 
         pred_response_dB = 20. * torch.log10(self.calculate_predicted_response().detach().cpu())
-        torch.save(pred_response_dB, os.path.join(folder_name, f"pred_response_{dataset_index}.pt"))
+
+        pred_rt = convert_response_to_rt(pred_response_dB, self.delays, self.sample_rate)
+
         torch.save(self.dataset_freqs, os.path.join(folder_name, f"pred_freqs_{dataset_index}.pt"))
+        torch.save(pred_response_dB, os.path.join(folder_name, f"pred_response_{dataset_index}.pt"))
+        torch.save(pred_rt, os.path.join(folder_name, f"pred_rt_{dataset_index}.pt"))
