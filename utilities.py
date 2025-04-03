@@ -4,7 +4,7 @@ import torch
 # UTILITIES
 ###############################################################################
 def log_normalize(value, min, max):
-  value = (torch.log(value) - torch.log(min)) / (torch.log(max) - torch.log((min)))
+  value = (torch.log10(value) - torch.log10(min)) / (torch.log10(max) - torch.log10((min)))
   return value
 
 def log_denormalize(value, min, max):
@@ -20,7 +20,7 @@ def lin_denormalize(value, min, max):
   return value
 
 
-MIN_FREQ = 5.
+MIN_FREQ = 1.
 MAX_FREQ = 19500.
 
 def frequency_denormalize(f):
@@ -46,8 +46,8 @@ def gain_normalize(g):
   max = torch.tensor(MAX_GAIN_DB)
   return lin_normalize(g, min, max)
 
-MIN_Q = 0.03
-MAX_Q = 40.
+MIN_Q = 0.01
+MAX_Q = 20.
 
 def q_denormalize(q):
   min = torch.tensor(MIN_Q)

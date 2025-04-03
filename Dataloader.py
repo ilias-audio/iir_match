@@ -35,7 +35,7 @@ class Dataloader:
     self.dataset_freqs = 10**3 * (2 ** (np.arange(-17, 14) / 3))
 
   def interpolate_dataset(self, N=2048):
-    self.freqs = np.logspace(np.log10(20), np.log10(20000), N)
+    self.freqs = np.logspace(np.log10(1), np.log10(20000), N)
     self.dataset = np.zeros((N, self.num_of_rt))
     for i in range(self.num_of_rt):
       self.dataset[:, i] = np.interp(self.freqs, self.dataset_freqs, self.raw_dataset[:,i])

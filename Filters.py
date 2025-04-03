@@ -188,7 +188,7 @@ def evaluate_mag_response(
   
   # Compute responses for each band
   low_shelf_responses = RBJ_LowShelf(x, F[0, :], G[0, :], Q[0, :]).response
-  bell_responses = torch.stack([RBJ_Bell(x, F[i, :], G[i, :], Q[i, :]).response for i in range(1, NUM_OF_BANDS - 1)], dim=1)
+  bell_responses = torch.stack([RBJ_Bell(x, F[i, :], G[i, :], Q[i, :]).response for i in range(1, NUM_OF_BANDS-1)], dim=1)
   high_shelf_responses = RBJ_HighShelf(x, F[-1, :], G[-1, :], Q[-1, :]).response
   
   # Combine responses

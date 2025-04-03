@@ -20,26 +20,28 @@ if __name__ == "__main__":
     NUM_OF_DELAYS = 1
     NUM_OF_BANDS = 12
     NUM_OF_ITER = 10000
-    INTERPOLATION_SIZE = 128
-    NUM_OF_RT = 100
+    INTERPOLATION_SIZE = 512
+    NUM_OF_RT = 1000
     ##########################################
 
     # Load dataset and interpolate data to a bigger size
     raw_dataset_path = os.path.join("data", "two-stage-RT-values.mat")
     RT_Dataset = Dataloader.Dataloader(raw_dataset_path, INTERPOLATION_SIZE)
 
-    max_workers = max(1, multiprocessing.cpu_count() // 2)
+    max_workers = max(1, multiprocessing.cpu_count())
     print(f"Using {max_workers} CPU workers for training.")
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         executor.map(train_instance, range(NUM_OF_RT))
+    
+    # train_instance(1)
 
     
     # load saved responses with freqs on all responses
-    Results_Analyzer = Analyzer.Analyzer("dataset_")
+    Results_Analyzer = Analyzer.Analyzer("dataset_", NUM_OF_BANDS)
     Results_Analyzer.load_responses(NUM_OF_RT, NUM_OF_DELAYS)
 
-    Results_Analyzer.compute_relative_error(RT_Dataset)
+    Results_Analyzer.compute_relative_error(RT_Dataset, NUM_OF_RT)
 
     print(Results_Analyzer.trained_frequencies.shape)
     print(Results_Analyzer.trained_responses.shape)

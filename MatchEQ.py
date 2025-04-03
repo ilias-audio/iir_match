@@ -14,7 +14,7 @@ class MatchEQ:
         self.num_of_bands = num_of_bands
         self.num_of_delays = num_of_delays
         self.min_delay_in_seconds = 0.003
-        self.max_delay_in_seconds = 0.3
+        self.max_delay_in_seconds = 0.1
         self.min_delay_in_samples = int(self.min_delay_in_seconds * self.sample_rate)
         self.max_delay_in_samples = int(self.max_delay_in_seconds * self.sample_rate)
         self.num_of_iter = num_of_iter
@@ -22,6 +22,7 @@ class MatchEQ:
         assert self.delays.shape == (self.num_of_delays, 1), "Delays should be a column vector"
         self.loss_function = torch.nn.MSELoss()
         self.dataset_freqs = torch.tensor(RT_Dataset.freqs, device=self.device, dtype=torch.float32)
+        self.dataset = torch.tensor(RT_Dataset.dataset, dtype=torch.float32)
 
         self.init_training_parameters()
         self.convert_dataset_rt_to_responses(RT_Dataset)
@@ -34,18 +35,20 @@ class MatchEQ:
 
     def init_training_parameters(self):
         self.parameters = torch.nn.ParameterList()
-        init_min_freq = torch.log(torch.tensor(5.))
-        init_max_freq = torch.log(torch.tensor(20000.))
+        init_min_freq = torch.log10(torch.tensor(1.))
+        init_max_freq = torch.log10(torch.tensor(20000.))
 
         freq_values = torch.ones(self.num_of_bands, requires_grad=False, device=self.device, dtype=torch.float32)
-        freq_values[0:-2] = torch.logspace(init_min_freq, init_max_freq, self.num_of_bands-2)
+        freq_values[1:-1] = torch.logspace(init_min_freq, init_max_freq, self.num_of_bands-2)
         # Make the shelfs centered at 1000 Hz
         freq_values[0] = 1000 
         freq_values[-1] = 1000
+        # freq_values.requires_grad(True)
+        freq_values.requires_grad_(True)
 
-        self.parameters.append(frequency_normalize(freq_values))  # Common Freqs
-        self.parameters.append(torch.zeros(self.num_of_bands, requires_grad=True, device=self.device, dtype=torch.float32))  # Common gains
-        self.parameters.append(torch.zeros(self.num_of_bands, requires_grad=True, device=self.device, dtype=torch.float32))  # Common Q
+        self.parameters.append(torch.special.logit((frequency_normalize(freq_values)), eps=1e-6))  # Common Freqs
+        self.parameters.append(torch.ones(self.num_of_bands, requires_grad=True, device=self.device, dtype=torch.float32) * -0.1)  # Common gains
+        self.parameters.append(torch.ones(self.num_of_bands, requires_grad=True, device=self.device, dtype=torch.float32) * 0.3)  # Common Q
         
         assert self.parameters[0].shape == torch.Size([self.num_of_bands]), f"Frequency values should be a column vector, but got {self.parameters[0].shape}"
         assert self.parameters[1].shape == torch.Size([self.num_of_bands]), f"Gain values should be a column vector, but got {self.parameters[1].shape}"
@@ -64,7 +67,8 @@ class MatchEQ:
             pred_response = self.calculate_predicted_response()
             pred_response_dB = 20. * torch.log10(pred_response)
 
-            loss = self.loss_function(self.responses_dataset[dataset_index, :,:], pred_response_dB)
+            # loss = self.loss_function(self.dataset[:, dataset_index], convert_response_to_rt(pred_response_dB, self.delays, self.sample_rate).squeeze())
+            loss = self.loss_function(self.responses_dataset[ dataset_index, :], pred_response_dB)
 
             loss.backward()
 
@@ -117,6 +121,7 @@ class MatchEQ:
         pred_response_dB = 20. * np.log10(self.calculate_predicted_response().detach().cpu().numpy())
         
         # Plot frequency response
+        os.makedirs("figures", exist_ok=True)
         axs.semilogx(self.dataset_freqs.cpu().numpy(), target_response_dB, label="Target", linestyle='dotted')
         axs.semilogx(self.dataset_freqs.cpu().numpy(), pred_response_dB, label="Prediction")
         axs.set_title("Frequency Response")
@@ -128,7 +133,7 @@ class MatchEQ:
 
     def save_trained_parameters(self, dataset_index: int):
         # Create a folder for the dataset_index if it doesn't exist
-        folder_name = f"dataset_{dataset_index}"
+        folder_name = f"dataset_{dataset_index}_{self.num_of_bands}_bands" 
         os.makedirs(folder_name, exist_ok=True)
 
         # Save the trained parameters in the folder
