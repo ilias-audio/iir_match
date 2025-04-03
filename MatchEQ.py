@@ -26,12 +26,16 @@ class MatchEQ:
 
         self.init_training_parameters()
         self.convert_dataset_rt_to_responses(RT_Dataset)
+        self.convert_median_to_responses(RT_Dataset)
         self.setup_optimizer()
 
     def convert_dataset_rt_to_responses(self, RT_Dataset: Dataloader):
         self.responses_dataset = torch.zeros((RT_Dataset.num_of_rt, len(self.dataset_freqs), self.num_of_delays), device=self.device)
         for i in range(RT_Dataset.num_of_rt):
             self.responses_dataset[i,:,:] = ((-60 * self.delays.cpu()) / (self.sample_rate * RT_Dataset.dataset[:, i])).T
+
+    def convert_median_to_responses(self, RT_Dataset: Dataloader):
+        self.median_response = ((-60 * self.delays.cpu()) / (self.sample_rate * RT_Dataset.median_rt))
 
     def init_training_parameters(self):
         self.parameters = torch.nn.ParameterList()
@@ -69,6 +73,31 @@ class MatchEQ:
 
             # loss = self.loss_function(self.dataset[:, dataset_index], convert_response_to_rt(pred_response_dB, self.delays, self.sample_rate).squeeze())
             loss = self.loss_function(self.responses_dataset[ dataset_index, :], pred_response_dB)
+
+            loss.backward()
+
+            self.optimizer.step()
+            self.scheduler.step()
+
+            pbar.set_postfix({"loss": loss.item()})
+        
+        # print the trained parameters
+        print(f"Trained Frequencies: {self.eq_parameters_freqs.data}")
+        print(f"Trained Gains: {self.eq_parameters_gains.data}")
+        print(f"Trained Q: {self.eq_parameters_q.data}")
+        print(f"Trained Delays: {self.delays.data}")
+
+    def train_median(self):
+        pbar = tqdm(range(self.num_of_iter), desc=f"Median RT")
+
+        for n in pbar:
+            self.optimizer.zero_grad()
+
+            pred_response = self.calculate_predicted_response()
+            pred_response_dB = 20. * torch.log10(pred_response)
+
+            # loss = self.loss_function(self.dataset[:, dataset_index], convert_response_to_rt(pred_response_dB, self.delays, self.sample_rate).squeeze())
+            loss = self.loss_function(self.median_response.squeeze(), pred_response_dB.squeeze())
 
             loss.backward()
 
@@ -131,9 +160,31 @@ class MatchEQ:
         plt.tight_layout()
         plt.savefig(f"./figures/match_rt_{dataset_index}.png")
 
+
+    def plot_median_results(self):
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+
+        fig, axs = plt.subplots(figsize=(10, 10))
+
+        target_response_dB = self.median_response.cpu().numpy().squeeze()
+        pred_response_dB = 20. * np.log10(self.calculate_predicted_response().detach().cpu().numpy())
+        
+        # Plot frequency response
+        os.makedirs("figures", exist_ok=True)
+        axs.semilogx(self.dataset_freqs.cpu().numpy(), target_response_dB, label="Target", linestyle='dotted')
+        axs.semilogx(self.dataset_freqs.cpu().numpy(), pred_response_dB, label="Prediction")
+        axs.set_title("Median Frequency Response")
+        axs.set_xlabel("Frequency (Hz)")
+        axs.set_ylabel("Magnitude (dB)")
+        axs.legend()
+        plt.tight_layout()
+        plt.savefig(f"./figures/match_rt_median.png")
+
     def save_trained_parameters(self, dataset_index: int):
         # Create a folder for the dataset_index if it doesn't exist
-        folder_name = f"dataset_{dataset_index}_{self.num_of_bands}_bands" 
+        folder_name = os.path.join("results", f"dataset_median_{self.num_of_bands}_bands")
         os.makedirs(folder_name, exist_ok=True)
 
         # Save the trained parameters in the folder
@@ -149,3 +200,22 @@ class MatchEQ:
         torch.save(self.dataset_freqs, os.path.join(folder_name, f"pred_freqs_{dataset_index}.pt"))
         torch.save(pred_response_dB, os.path.join(folder_name, f"pred_response_{dataset_index}.pt"))
         torch.save(pred_rt, os.path.join(folder_name, f"pred_rt_{dataset_index}.pt"))
+
+    def save_median_parameters(self):
+        # Create a folder for the dataset_index if it doesn't exist
+        folder_name = os.path.join("results", f"dataset_median_{self.num_of_bands}_bands")
+        os.makedirs(folder_name, exist_ok=True)
+
+        # Save the trained parameters in the folder
+        torch.save(self.eq_parameters_freqs, os.path.join(folder_name, f"trained_frequencies_median.pt"))
+        torch.save(self.eq_parameters_gains, os.path.join(folder_name, f"trained_gains_median.pt"))
+        torch.save(self.eq_parameters_q, os.path.join(folder_name, f"trained_q_median.pt"))
+        torch.save(self.delays, os.path.join(folder_name, f"trained_delays_median.pt"))
+
+        pred_response_dB = 20. * torch.log10(self.calculate_predicted_response().detach().cpu())
+
+        pred_rt = convert_response_to_rt(pred_response_dB, self.delays, self.sample_rate)
+
+        torch.save(self.dataset_freqs, os.path.join(folder_name, f"pred_freqs_median.pt"))
+        torch.save(pred_response_dB, os.path.join(folder_name, f"pred_response_median.pt"))
+        torch.save(pred_rt, os.path.join(folder_name, f"pred_rt_median.pt"))

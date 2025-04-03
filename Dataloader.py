@@ -21,6 +21,8 @@ class Dataloader:
     assert self.dataset.shape[0] == self.freqs.shape[0], "Dataset and frequency should have the same number of bands"
     assert self.dataset.shape[1] == self.raw_dataset.shape[1], "Dataset and raw dataset should have the same number of RTs"
 
+    self.compute_median_rt()
+
 
   def import_rt_dataset(self, path: str):
     raw_dataset = scipy.io.loadmat(path)
@@ -34,8 +36,17 @@ class Dataloader:
     '''
     self.dataset_freqs = 10**3 * (2 ** (np.arange(-17, 14) / 3))
 
+  def compute_median_rt(self):
+    self.raw_median_rt = np.array(np.median(self.raw_dataset, axis=1), dtype='f')
+    self.median_rt = np.array(np.median(self.dataset, axis=1), dtype='f')
+
+    assert self.raw_median_rt.shape[0] == self.num_of_bands
+    assert self.median_rt.shape[0] == self.interpolation_size
+
   def interpolate_dataset(self, N=2048):
     self.freqs = np.logspace(np.log10(1), np.log10(20000), N)
     self.dataset = np.zeros((N, self.num_of_rt))
     for i in range(self.num_of_rt):
       self.dataset[:, i] = np.interp(self.freqs, self.dataset_freqs, self.raw_dataset[:,i])
+
+  
