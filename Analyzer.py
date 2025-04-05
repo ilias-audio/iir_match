@@ -37,15 +37,41 @@ class Analyzer:
             self.trained_rt[i,:,:] = torch.load(rt_filename)
     
     def compute_relative_error(self, RT_Dataset: Dataloader, number_of_RT: int):
-        self.relative_error = torch.zeros((self.trained_rt.shape[0:2]), device=self.trained_responses.device)
-        for i in range(self.trained_rt.shape[0]):
-            self.relative_error[i,:] = ((torch.tensor(RT_Dataset.dataset[:,i]) - self.trained_rt[i,:,0]) / RT_Dataset.dataset[:,i]) * 100
+        import matplotlib as mpl
         import matplotlib.pyplot as plt
+        mpl.rcParams.update({
+            "text.usetex": True,
+            "font.family": "serif",
+            "font.serif": ["Times"],
+            "axes.labelsize": 10,
+            "xtick.labelsize": 10,
+            "ytick.labelsize": 10,
+        })
+        # plt.tight_layout(rect=[0, 0, 1, 0.8])
+        mpl.rcParams.update({
+            "ytick.minor.visible": False,
+            "ytick.major.size": 5,
+            "ytick.labelsize": 10,
+            "ytick.major.left": True,
+            "ytick.labelleft": True,
+        })
+        self.relative_error = torch.zeros((self.trained_rt.shape[0:2]), device=self.trained_responses.device)
+        start = 0
+        for i in range(self.trained_rt.shape[0]):
+            self.relative_error[i,start:] = ((torch.tensor(RT_Dataset.dataset[start:,i]) - self.trained_rt[i,start:,0]) / RT_Dataset.dataset[start:,i]) * 100
+        
+        plt.figure(figsize=(4, 2.5))
+        
         plt.clf()
-        plt.hist(self.relative_error.cpu().numpy().flatten(), density=True, histtype='step', log=True, bins=number_of_RT)
-        plt.xlabel("Percentage Error")
+        # plt.subplot(1, 1, 1)
+        plt.hist(self.relative_error.cpu().numpy().flatten(), density=True, histtype='step', log=True, bins=number_of_RT // 10)
+        plt.xlabel(r"T$_{60}$ Error (\%)")
         plt.ylabel("Probability")
-        plt.xlim((-100,100))
-        plt.title("T60 Error Distribution")
-        plt.savefig(os.path.join("figures", "figure_4.png"))
+        plt.xlim((-110,110))
+        plt.ylim((1e-6, 1e0))
+        plt.xticks([-100, -75, -50, -25, 0, 25, 50, 75, 100], labels=["$-100$", "$-75$", "$-50$", "$-25$", "$0$", "$25$", "$50$", "$75$", "$100$"])
+        plt.yticks([ 1e-4, 1e-2, 1e0], labels=["$10^{-4}$", "$10^{-2}$", "$1$"])
+        # plt.title("T60 Error Distribution")
+        plt.tight_layout()
+        plt.savefig(os.path.join("figures", "figure_4.png"), dpi=300, bbox_inches='tight')
     
