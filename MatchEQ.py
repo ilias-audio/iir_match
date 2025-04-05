@@ -18,7 +18,8 @@ class MatchEQ:
         self.min_delay_in_samples = int(self.min_delay_in_seconds * self.sample_rate)
         self.max_delay_in_samples = int(self.max_delay_in_seconds * self.sample_rate)
         self.num_of_iter = num_of_iter
-        self.delays, _ = torch.sort(torch.randint(self.min_delay_in_samples, self.max_delay_in_samples, (self.num_of_delays, 1), device=self.device, dtype=torch.float32), dim=0)
+        # self.delays, _ = torch.sort(torch.randint(self.min_delay_in_samples, self.max_delay_in_samples, (self.num_of_delays, 1), device=self.device, dtype=torch.float32), dim=0)
+        self.delays = torch.tensor(4800, device=self.device, dtype=torch.float32).repeat(self.num_of_delays, 1)
         assert self.delays.shape == (self.num_of_delays, 1), "Delays should be a column vector"
         self.loss_function = torch.nn.MSELoss()
         self.dataset_freqs = torch.tensor(RT_Dataset.freqs, device=self.device, dtype=torch.float32)
