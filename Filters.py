@@ -16,7 +16,7 @@ class RBJ_LowShelf:
         self.A = torch.pow(10.0,(gain/40.0))
 
     def compute_response(self):
-        W = self.current_freq / self.cut_off
+        W = self.current_freq.unsqueeze(-1) / self.cut_off.unsqueeze(0)
         WW = W*W
         gain_q = torch.sqrt(self.A) / self.q_factor
 
@@ -75,7 +75,7 @@ class RBJ_HighShelf:
         self.A = torch.pow(10.0,(gain/40.0))
 
     def compute_response(self):
-        W = self.current_freq / self.cut_off
+        W = self.current_freq.unsqueeze(-1) / self.cut_off.unsqueeze(0)
         WW = W*W
         gain_q = torch.sqrt(self.A) / self.q_factor
 
@@ -133,7 +133,7 @@ class RBJ_Bell:
         self.A = torch.pow(10.0,(gain/40.0))
 
     def compute_response(self):
-        W = self.current_freq / self.cut_off
+        W = self.current_freq.unsqueeze(-1) / self.cut_off.unsqueeze(0)
         WW = W*W
         gain_q = self.A / self.q_factor
         inv_gainq = 1. / (self.A * self.q_factor)
@@ -172,3 +172,28 @@ class RBJ_Bell:
         
         
         self.sos = torch.stack([b0, b1, b2, a0, a1, a2], dim=1)
+
+
+def evaluate_mag_response(
+  x: torch.Tensor,     # Frequency vector
+  F: torch.Tensor,     # Center frequencies (NUM_OF_DELAYS x NUM_OF_BANDS)
+  G: torch.Tensor,     # Gain values (NUM_OF_DELAYS x NUM_OF_BANDS)
+  Q: torch.Tensor      # Q values (NUM_OF_DELAYS x NUM_OF_BANDS)
+):
+  assert F.shape == G.shape == Q.shape, "All parameter arrays must have the same shape"
+  NUM_OF_BANDS, NUM_OF_DELAYS = F.shape
+  
+  # Initialize response tensor
+  response = torch.ones((len(x), NUM_OF_DELAYS), device=x.device)
+  
+  # Compute responses for each band
+  low_shelf_responses = RBJ_LowShelf(x, F[0, :], G[0, :], Q[0, :]).response
+  bell_responses = torch.stack([RBJ_Bell(x, F[i, :], G[i, :], Q[i, :]).response for i in range(1, NUM_OF_BANDS-1)], dim=1)
+  high_shelf_responses = RBJ_HighShelf(x, F[-1, :], G[-1, :], Q[-1, :]).response
+  
+  # Combine responses
+  response *= low_shelf_responses
+  response *= torch.prod(bell_responses, dim=1)
+  response *= high_shelf_responses
+
+  return response
