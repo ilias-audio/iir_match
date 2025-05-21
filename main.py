@@ -20,7 +20,7 @@ if __name__ == "__main__":
     ##########################################
 
     # Load dataset and interpolate data to a bigger size
-    raw_dataset_path = os.path.join("data", "two-stage-RT-values.mat")
+    raw_dataset_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data", "two-stage-RT-values.mat")
     RT_dataset = Dataloader.Dataloader(raw_dataset_path, INTERPOLATION_SIZE)
 
     # print(RT_dataset.median_rt.shape)

@@ -3,8 +3,9 @@ from Dataloader import Dataloader
 from utilities import frequency_normalize, frequency_denormalize 
 from utilities import gain_denormalize, q_denormalize
 from utilities import convert_proto_gain_to_delay, convert_response_to_rt
-from Filters import evaluate_mag_response
+from Filters import evaluate_mag_response, evaluate_sos_response
 from tqdm import tqdm
+import auraloss
 import os
 
 class MatchEQ:
@@ -21,7 +22,20 @@ class MatchEQ:
         # self.delays, _ = torch.sort(torch.randint(self.min_delay_in_samples, self.max_delay_in_samples, (self.num_of_delays, 1), device=self.device, dtype=torch.float32), dim=0)
         self.delays = torch.tensor(4800, device=self.device, dtype=torch.float32).repeat(self.num_of_delays, 1)
         assert self.delays.shape == (self.num_of_delays, 1), "Delays should be a column vector"
-        self.loss_function = torch.nn.MSELoss()
+        # self.loss_function = torch.nn.MSELoss()
+
+        self.loss_function = auraloss.freq.MultiResolutionSTFTLoss()
+            # fft_sizes=[1024, 2048, 8192],
+            # hop_sizes=[256, 512, 2048],
+            # win_lengths=[1024, 2048, 8192],
+            # scale="mel",
+            # n_bins=128,
+            # sample_rate=sample_rate,
+            # perceptual_weighting=True,
+        # )
+
+
+
         self.dataset_freqs = torch.tensor(RT_Dataset.freqs, device=self.device, dtype=torch.float32)
         self.dataset = torch.tensor(RT_Dataset.dataset, dtype=torch.float32)
 
@@ -71,7 +85,10 @@ class MatchEQ:
 
             pred_response = self.calculate_predicted_response()
             pred_response_dB = 20. * torch.log10(pred_response)
-
+            print("---")
+            print(pred_response_dB.shape)
+            print(self.responses_dataset[dataset_index, :, :].shape)
+            print("---")
             # loss = self.loss_function(self.dataset[:, dataset_index], convert_response_to_rt(pred_response_dB, self.delays, self.sample_rate).squeeze())
             loss = self.loss_function(self.responses_dataset[ dataset_index, :], pred_response_dB)
 
@@ -95,10 +112,15 @@ class MatchEQ:
             self.optimizer.zero_grad()
 
             pred_response = self.calculate_predicted_response()
+            pred_response = self.calculate_predicted_response_sos()
             pred_response_dB = 20. * torch.log10(pred_response)
+            print("---")
+            print(pred_response_dB.T.unsqueeze(0).shape)
+            print(self.median_response.unsqueeze(0).shape)
+            print("---")
 
             # loss = self.loss_function(self.dataset[:, dataset_index], convert_response_to_rt(pred_response_dB, self.delays, self.sample_rate).squeeze())
-            loss = self.loss_function(self.median_response.squeeze(), pred_response_dB.squeeze())
+            loss = self.loss_function(self.median_response.unsqueeze(0), pred_response_dB.T.unsqueeze(0))
 
             loss.backward()
 
@@ -123,6 +145,21 @@ class MatchEQ:
         assert self.eq_parameters_q.shape == (self.num_of_bands, self.num_of_delays), "Q values should Bands X Delays Matrix"
 
         pred_responses = evaluate_mag_response(self.dataset_freqs, self.eq_parameters_freqs, self.eq_parameters_gains, self.eq_parameters_q)
+        
+        assert pred_responses.shape == (len(self.dataset_freqs), self.num_of_delays), "Predicted responses should Freqs X Delays Matrix"
+        
+        return pred_responses
+    
+    def calculate_predicted_response_sos(self):
+        self.eq_parameters_freqs = self.parameter_to_frequency()
+        self.eq_parameters_gains = self.parameter_to_gains()
+        self.eq_parameters_q     = self.parameter_to_q()
+
+        assert self.eq_parameters_freqs.shape == (self.num_of_bands, self.num_of_delays), "Frequency values should Bands X Delays Matrix"
+        assert self.eq_parameters_gains.shape == (self.num_of_bands, self.num_of_delays), "Gain values should Bands X Delays Matrix"
+        assert self.eq_parameters_q.shape == (self.num_of_bands, self.num_of_delays), "Q values should Bands X Delays Matrix"
+
+        pred_responses = evaluate_sos_response(self.dataset_freqs, self.eq_parameters_freqs, self.eq_parameters_gains, self.eq_parameters_q)
         
         assert pred_responses.shape == (len(self.dataset_freqs), self.num_of_delays), "Predicted responses should Freqs X Delays Matrix"
         

@@ -1,4 +1,5 @@
 import torch
+import torchaudio
 
 class RBJ_LowShelf:
     
@@ -10,7 +11,8 @@ class RBJ_LowShelf:
         self.sample_rate = sample_rate
         self.set_linear_gain(gain)
         self.compute_response()
-        self.sos = torch.zeros((1,6))
+        # self.sos = torch.zeros((1,6))
+        self.compute_sos()
 
     def set_linear_gain(self, gain):
         self.A = torch.pow(10.0,(gain/40.0))
@@ -54,7 +56,12 @@ class RBJ_LowShelf:
         a0 = torch.ones_like(b0)
         
         self.sos = torch.stack([b0, b1, b2, a0, a1, a2], dim=1)
-        
+        omega = torch.linspace(0, torch.pi, len(self.current_freq), dtype=torch.float32)  # [0, 2*pi fc/fs]
+        e_jw = torch.exp(-1j * omega)  # e^{-jω}
+        e_jw2 = e_jw ** 2
+        num = b0 + b1*e_jw + b2*e_jw2
+        den = 1 + a1*e_jw + a2*e_jw2
+        self.sos_response = (num / den).unsqueeze(-1)
         
         
 
@@ -68,7 +75,7 @@ class RBJ_HighShelf:
         self.sample_rate = sample_rate
         self.set_linear_gain(gain)
         self.compute_response()
-        self.sos = torch.zeros((1,6))
+        self.compute_sos()
 
 
     def set_linear_gain(self, gain):
@@ -115,6 +122,12 @@ class RBJ_HighShelf:
         a0 = torch.ones_like(b0)
         
         self.sos = torch.stack([b0, b1, b2, a0, a1, a2], dim=1)
+        omega = torch.linspace(0, torch.pi, len(self.current_freq), dtype=torch.float32)  # [0, 2*pi fc/fs]
+        e_jw = torch.exp(-1j * omega)  # e^{-jω}
+        e_jw2 = e_jw ** 2
+        num = b0 + b1*e_jw + b2*e_jw2
+        den = 1 + a1*e_jw + a2*e_jw2
+        self.sos_response = (num / den).unsqueeze(-1)
 
 
 class RBJ_Bell:
@@ -126,7 +139,7 @@ class RBJ_Bell:
         self.sample_rate = sample_rate
         self.set_linear_gain(gain)
         self.compute_response()
-        self.sos = torch.zeros((1,6))
+        self.compute_sos()
 
 
     def set_linear_gain(self, gain):
@@ -172,6 +185,13 @@ class RBJ_Bell:
         
         
         self.sos = torch.stack([b0, b1, b2, a0, a1, a2], dim=1)
+        omega = torch.linspace(0, torch.pi, len(self.current_freq), dtype=torch.float32)  # [0, 2*pi fc/fs]
+        e_jw = torch.exp(-1j * omega)  # e^{-jω}
+        e_jw2 = e_jw ** 2
+        num = b0 + b1*e_jw + b2*e_jw2
+        den = 1 + a1*e_jw + a2*e_jw2
+        self.sos_response = (num / den).unsqueeze(-1)
+
 
 
 def evaluate_mag_response(
@@ -190,6 +210,30 @@ def evaluate_mag_response(
   low_shelf_responses = RBJ_LowShelf(x, F[0, :], G[0, :], Q[0, :]).response
   bell_responses = torch.stack([RBJ_Bell(x, F[i, :], G[i, :], Q[i, :]).response for i in range(1, NUM_OF_BANDS-1)], dim=1)
   high_shelf_responses = RBJ_HighShelf(x, F[-1, :], G[-1, :], Q[-1, :]).response
+  
+  # Combine responses
+  response *= low_shelf_responses
+  response *= torch.prod(bell_responses, dim=1)
+  response *= high_shelf_responses
+
+  return response
+
+def evaluate_sos_response(
+  x: torch.Tensor,     # Frequency vector
+  F: torch.Tensor,     # Center frequencies (NUM_OF_DELAYS x NUM_OF_BANDS)
+  G: torch.Tensor,     # Gain values (NUM_OF_DELAYS x NUM_OF_BANDS)
+  Q: torch.Tensor      # Q values (NUM_OF_DELAYS x NUM_OF_BANDS)
+):
+  assert F.shape == G.shape == Q.shape, "All parameter arrays must have the same shape"
+  NUM_OF_BANDS, NUM_OF_DELAYS = F.shape
+  
+  # Initialize response tensor
+  response = torch.ones((len(x), NUM_OF_DELAYS), device=x.device, dtype=torch.cfloat)
+  
+  # Compute responses for each band
+  low_shelf_responses = RBJ_LowShelf(x, F[0, :], G[0, :], Q[0, :]).sos_response
+  bell_responses = torch.stack([RBJ_Bell(x, F[i, :], G[i, :], Q[i, :]).sos_response for i in range(1, NUM_OF_BANDS-1)], dim=1)
+  high_shelf_responses = RBJ_HighShelf(x, F[-1, :], G[-1, :], Q[-1, :]).sos_response
   
   # Combine responses
   response *= low_shelf_responses
