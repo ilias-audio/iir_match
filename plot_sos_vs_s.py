@@ -4,13 +4,17 @@ import matplotlib.pyplot as plt
 import os
 # parameters vectors
 N = 512
+NUMBER_OF_DELAYS = 6
 
-cutoff_freqs = torch.tensor([200., 3000., 8000.]).unsqueeze(-1)
-gains        = torch.tensor([-6., 12., -20.]).unsqueeze(-1)
-Q            = torch.tensor([1., 2., .5]).unsqueeze(-1)
+cutoff_freqs = torch.tensor([200., 3000., 8000.]).repeat(NUMBER_OF_DELAYS,1).T
+gains        = torch.tensor([-6., 12., -20.]).repeat(NUMBER_OF_DELAYS,1).T
+gains[:,1]   = gains[:,0] / 2
+gains[:,2]   = gains[:,1] / 2
+gains[:,3]   = gains[:,2] / 2
+Q            = torch.tensor([1., 2., .5]).repeat(NUMBER_OF_DELAYS,1).T
 
 
-freqency_axis = torch.logspace(torch.log10(torch.tensor(1)), torch.log10(torch.tensor(20000)), N)
+freqency_axis = torch.logspace(torch.log10(torch.tensor(1.)), torch.log10(torch.tensor(20000.)), N)
 
 s_plane_response = Filters.evaluate_mag_response(freqency_axis, cutoff_freqs, gains, Q)
 sos_response = Filters.evaluate_sos_response(freqency_axis, cutoff_freqs, gains, Q)

@@ -57,11 +57,11 @@ class RBJ_LowShelf:
         
         self.sos = torch.stack([b0, b1, b2, a0, a1, a2], dim=1)
         omega = torch.linspace(0, torch.pi, len(self.current_freq), dtype=torch.float32)  # [0, 2*pi fc/fs]
-        e_jw = torch.exp(-1j * omega)  # e^{-jω}
+        e_jw = torch.exp(-1j * omega).unsqueeze(-1)  # e^{-jω}
         e_jw2 = e_jw ** 2
-        num = b0 + b1*e_jw + b2*e_jw2
-        den = 1 + a1*e_jw + a2*e_jw2
-        self.sos_response = (num / den).unsqueeze(-1)
+        num = b0 + e_jw * b1 + e_jw2 * b2
+        den = 1 + e_jw * a1 + e_jw2 * a2
+        self.sos_response = (num / den)
         
         
 
@@ -123,11 +123,11 @@ class RBJ_HighShelf:
         
         self.sos = torch.stack([b0, b1, b2, a0, a1, a2], dim=1)
         omega = torch.linspace(0, torch.pi, len(self.current_freq), dtype=torch.float32)  # [0, 2*pi fc/fs]
-        e_jw = torch.exp(-1j * omega)  # e^{-jω}
+        e_jw = torch.exp(-1j * omega).unsqueeze(-1)  # e^{-jω}
         e_jw2 = e_jw ** 2
-        num = b0 + b1*e_jw + b2*e_jw2
-        den = 1 + a1*e_jw + a2*e_jw2
-        self.sos_response = (num / den).unsqueeze(-1)
+        num = b0 + e_jw * b1 + e_jw2 * b2
+        den = 1 + e_jw * a1 + e_jw2 * a2
+        self.sos_response = (num / den)
 
 
 class RBJ_Bell:
@@ -186,11 +186,11 @@ class RBJ_Bell:
         
         self.sos = torch.stack([b0, b1, b2, a0, a1, a2], dim=1)
         omega = torch.linspace(0, torch.pi, len(self.current_freq), dtype=torch.float32)  # [0, 2*pi fc/fs]
-        e_jw = torch.exp(-1j * omega)  # e^{-jω}
+        e_jw = torch.exp(-1j * omega).unsqueeze(-1)  # e^{-jω}
         e_jw2 = e_jw ** 2
-        num = b0 + b1*e_jw + b2*e_jw2
-        den = 1 + a1*e_jw + a2*e_jw2
-        self.sos_response = (num / den).unsqueeze(-1)
+        num = b0 + e_jw * b1 + e_jw2 * b2
+        den = 1 + e_jw * a1 + e_jw2 * a2
+        self.sos_response = (num / den)
 
 
 
