@@ -42,7 +42,7 @@ if __name__ == "__main__":
     max_workers = max(1, multiprocessing.cpu_count()-2)
     print(f"Using {max_workers} CPU workers for training.")
 
-    for i in [4,8,12,24,31]:
+    for i in [4]:
         train_median(i)
 
     # with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
