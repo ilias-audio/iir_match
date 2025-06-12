@@ -13,7 +13,7 @@ class RBJ_LowShelf:
         self.compute_response()
         # self.sos = torch.zeros((1,6))
         self.compute_sos()
-        self.impulse_response(self.sos[:,0:3], self.sos[:,3:6], int(24e3))
+        # self.impulse_response(self.sos[:,0:3], self.sos[:,3:6], int(24e3))
 
     def set_linear_gain(self, gain):
         self.A = torch.pow(10.0,(gain/40.0))
@@ -57,12 +57,12 @@ class RBJ_LowShelf:
         a0 = torch.ones_like(b0)
         
         self.sos = torch.stack([b0, b1, b2, a0, a1, a2], dim=1)
-        omega = torch.linspace(0, torch.pi, len(self.current_freq), dtype=torch.float32)  # [0, 2*pi fc/fs]
-        e_jw = torch.exp(-1j * omega).unsqueeze(-1)  # e^{-jω}
-        e_jw2 = e_jw ** 2
-        num = b0 + e_jw * b1 + e_jw2 * b2
-        den = 1 + e_jw * a1 + e_jw2 * a2
-        self.sos_response = (num / den)
+        # omega = torch.linspace(0, torch.pi, len(self.current_freq), dtype=torch.float32)  # [0, 2*pi fc/fs]
+        # e_jw = torch.exp(-1j * omega).unsqueeze(-1)  # e^{-jω}
+        # e_jw2 = e_jw ** 2
+        # num = b0 + e_jw * b1 + e_jw2 * b2
+        # den = 1 + e_jw * a1 + e_jw2 * a2
+        # self.sos_response = (num / den)
 
     def impulse_response(self, B, A, n_samples):
         B = torch.tensor(B, dtype=torch.float32)  # shape: (B, M)
@@ -100,7 +100,7 @@ class RBJ_HighShelf:
         self.set_linear_gain(gain)
         self.compute_response()
         self.compute_sos()
-        self.impulse_response(self.sos[:,0:3], self.sos[:,3:6], int(24e3))
+        # self.impulse_response(self.sos[:,0:3], self.sos[:,3:6], int(24e3))
 
 
     def set_linear_gain(self, gain):
@@ -147,12 +147,12 @@ class RBJ_HighShelf:
         a0 = torch.ones_like(b0)
         
         self.sos = torch.stack([b0, b1, b2, a0, a1, a2], dim=1)
-        omega = torch.linspace(0, torch.pi, len(self.current_freq), dtype=torch.float32)  # [0, 2*pi fc/fs]
-        e_jw = torch.exp(-1j * omega).unsqueeze(-1)  # e^{-jω}
-        e_jw2 = e_jw ** 2
-        num = b0 + e_jw * b1 + e_jw2 * b2
-        den = 1 + e_jw * a1 + e_jw2 * a2
-        self.sos_response = (num / den)
+        # omega = torch.linspace(0, torch.pi, len(self.current_freq), dtype=torch.float32)  # [0, 2*pi fc/fs]
+        # e_jw = torch.exp(-1j * omega).unsqueeze(-1)  # e^{-jω}
+        # e_jw2 = e_jw ** 2
+        # num = b0 + e_jw * b1 + e_jw2 * b2
+        # den = 1 + e_jw * a1 + e_jw2 * a2
+        # self.sos_response = (num / den)
 
     def impulse_response(self, B, A, n_samples):
         B = torch.tensor(B, dtype=torch.float32)  # shape: (B, M)
@@ -188,7 +188,7 @@ class RBJ_Bell:
         self.set_linear_gain(gain)
         self.compute_response()
         self.compute_sos()
-        self.impulse_response(self.sos[:,0:3], self.sos[:,3:6], int(24e3))
+        # self.impulse_response(self.sos[:,0:3], self.sos[:,3:6], int(24e3))
 
 
     def set_linear_gain(self, gain):
@@ -234,12 +234,12 @@ class RBJ_Bell:
         
         
         self.sos = torch.stack([b0, b1, b2, a0, a1, a2], dim=1)
-        omega = torch.linspace(0, torch.pi, len(self.current_freq), dtype=torch.float32)  # [0, 2*pi fc/fs]
-        e_jw = torch.exp(-1j * omega).unsqueeze(-1)  # e^{-jω}
-        e_jw2 = e_jw ** 2
-        num = b0 + e_jw * b1 + e_jw2 * b2
-        den = 1 + e_jw * a1 + e_jw2 * a2
-        self.sos_response = (num / den)
+        # omega = torch.linspace(0, torch.pi, len(self.current_freq), dtype=torch.float32)  # [0, 2*pi fc/fs]
+        # e_jw = torch.exp(-1j * omega).unsqueeze(-1)  # e^{-jω}
+        # e_jw2 = e_jw ** 2
+        # num = b0 + e_jw * b1 + e_jw2 * b2
+        # den = 1 + e_jw * a1 + e_jw2 * a2
+        # self.sos_response = (num / den)
 
     import torch
 
