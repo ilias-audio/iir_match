@@ -8,7 +8,7 @@ if __name__ == "__main__":
   SAMPLE_RATE = 48000
   NUM_OF_DELAYS = 1
   NUM_OF_BANDS = 6
-  NUM_OF_ITER = 6000
+  NUM_OF_ITER = 1000
   FFT_SIZE = 2**12
   ##########################################
 
@@ -26,9 +26,9 @@ device = torch.device("cpu")
 
 EQ_SIZE = (NUM_OF_BANDS, NUM_OF_DELAYS)
 
-F = torch.randint(1, 20_000, EQ_SIZE, device=device, dtype=torch.float32)  # Random frequencies in Hz
-G = (torch.rand(EQ_SIZE, device=device, dtype=torch.float32) - 0.5) * 24
-Q = (torch.rand(EQ_SIZE, device=device, dtype=torch.float32) + 0.1) * 10 
+F = torch.randint(20, 16000, EQ_SIZE, device=device, dtype=torch.float32)  # Random frequencies in Hz
+G = (torch.rand(EQ_SIZE, device=device, dtype=torch.float32) - 0.5) * 6
+Q = (torch.rand(EQ_SIZE, device=device, dtype=torch.float32) + 0.1) * 5 
 
 print(f"Target Frequencies: {F.squeeze()}")
 print(f"Target Gains: {G.squeeze()}")
@@ -88,10 +88,17 @@ MatchFFT = MatchFFT.MatchFFT(
 
 MatchFFT.train(target_filtered_signal, input_signal)
 
+
+
+
 # Add validation after training
 with torch.no_grad():
+    from utilities import *
+    # MatchFFT.parameters[0] = torch.special.logit(frequency_normalize(F).squeeze(), eps = 1e-6)
+    # MatchFFT.parameters[1] = torch.special.logit(gain_normalize(G*10).squeeze(), eps = 1e-6)
+    # MatchFFT.parameters[2] = torch.special.logit(q_normalize(Q).squeeze(), eps = 1e-6)
     final_prediction = MatchFFT.forward(input_signal)
-    final_loss = torch.nn.functional.mse_loss(target_filtered_signal, final_prediction)
+    final_loss = MatchFFT.loss_function(final_prediction.unsqueeze(0).unsqueeze(0), target_filtered_signal.unsqueeze(0))
     print(f"Final validation loss: {final_loss.item():.6f}")
     
     # Compute frequency domain error
