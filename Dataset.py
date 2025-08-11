@@ -3,12 +3,13 @@ import numpy as np
 
 
 class Dataset:
-  def __init__(self, path_to_rt_dataset, interpolation_size=128):
-
+  def __init__(self, path_to_rt_dataset, parameters):
+    interpolation_size = parameters["INTERPOLATION_SIZE"]
     self.import_rt_dataset(path_to_rt_dataset) # Rows are frequency bands, columns are RTs
     self.interpolate_dataset(interpolation_size) # Create values between 1 and 20kHz, with interpolation_size number of bands
     self.compute_median_rt() # Median RT for each band in the raw dataset and the interpolated dataset
 
+    
 
   def import_rt_dataset(self, path: str):
     raw_dataset = scipy.io.loadmat(path)
@@ -18,7 +19,7 @@ class Dataset:
 
   def interpolate_dataset(self, N=128):
     self.set_interpolation_size(N)
-    self.freqs = np.logspace(np.log10(1), np.log10(20000), N)
+    self._freqs = np.logspace(np.log10(1), np.log10(20000), N)
     self._dataset = np.zeros((N, self.num_of_rt))
 
     for i in range(self.num_of_rt):
@@ -29,7 +30,6 @@ class Dataset:
     assert self.dataset.shape[1] == 1000, "Dataset should have 1000 RTs"
     assert self.dataset.shape[0] == self.freqs.shape[0], "Dataset and frequency should have the same number of bands"
     assert self.dataset.shape[1] == self.raw_dataset.shape[1], "Dataset and raw dataset should have the same number of RTs"
-
 
   def compute_median_rt(self):
     self._raw_median_rt = np.array(np.median(self._raw_dataset, axis=1), dtype='f')
@@ -53,11 +53,9 @@ class Dataset:
     taken directly from twoFilters.m, line 40 on Two_stage_filter repo
     f =  10^3 * (2 .^ ([-17:13]/3))
     '''
-    self.raw_dataset_freqs = 10**3 * (2 ** (np.arange(-17, 14) / 3))
-    assert self.raw_dataset_freqs.ndim == 1, "Dataset frequency should be one-dimensional"
+    self._raw_dataset_freqs = 10**3 * (2 ** (np.arange(-17, 14) / 3))
+    assert self._raw_dataset_freqs.ndim == 1, "Dataset frequency should be one-dimensional"
 
-
-  
   @property
   def raw_dataset(self):
     return self._raw_dataset
@@ -85,3 +83,11 @@ class Dataset:
   @property
   def num_of_rt(self):
     return self._raw_dataset.shape[1]
+  
+  @property
+  def freqs(self):
+    return self._freqs
+
+  @property
+  def raw_dataset_freqs(self):
+    return self._raw_dataset_freqs
