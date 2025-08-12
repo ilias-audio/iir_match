@@ -100,13 +100,16 @@ class MatchEQ():
 
 
     def audio_train(self, dataset_index: int): #target_x: torch.Tensor, input_signal: torch.Tensor):
-        # Get the response for the given dataset index
-        target_response = self.responses_dataset[dataset_index, :] # it's dB
-        target_ir = self.turn_response_to_ir(self.db_to_linear(target_response))
-
-        ### Create a WGN Generator
+         ### Create a WGN Generator
         input_signal = torch.randn((1, self.sample_rate), device=self.device)  # 2 seconds
         input_signal /= input_signal.std()  # Normalize to unit variance for flat spectrum
+        
+        # Get the response for the given dataset index
+        target_response = self.responses_dataset[dataset_index, :] # it's dB
+        # Use a reasonable IR length for audio processing (e.g., 2048 samples)
+        target_ir = self.turn_response_to_ir(self.db_to_linear(target_response), target_length=len(input_signal))
+
+       
 
         n_fft = len(input_signal.squeeze())
         ir_fft_padded = torch.fft.fft(target_ir.squeeze(), n=n_fft)
@@ -200,8 +203,8 @@ class MatchEQ():
 
         # Plot IR frequency response if provided
         if ir is not None:
-            ir_fft = torch.fft.fft(ir.squeeze())
-            ir_freqs = torch.fft.fftfreq(ir.numel(), d=1/self.sample_rate)
+            ir_fft = torch.fft.rfft(ir.squeeze())  # Use rfft for real signals
+            ir_freqs = torch.fft.rfftfreq(ir.numel(), d=1/self.sample_rate)  # Use rfftfreq for positive frequencies only
             ir_mag_db = 20 * torch.log10(torch.abs(ir_fft) + 1e-12)
             plt.semilogx(
                 ir_freqs.detach().cpu().numpy(),
@@ -238,10 +241,14 @@ class MatchEQ():
         plt.close()
 
 
-    def turn_response_to_ir(self, response: torch.Tensor):
-        # Create the IR from the response
-        target_ir = torch.fft.fftshift(torch.fft.irfft(response.squeeze()))
-        window = torch.hann_window(target_ir.size(-1), periodic=False, device=self.device, dtype=torch.float32).expand_as(target_ir)
+    def turn_response_to_ir(self, response: torch.Tensor, target_length: int = None):
+        """
+        Convert a frequency response to an impulse response.
+        Since target_length will match input signal length, use response directly.
+        """
+        # Create IR from response directly (assuming it's already the right length for rfft)
+        target_ir = torch.fft.irfft(response.squeeze())
+        window = torch.hann_window(target_ir.size(-1), periodic=False, device=self.device, dtype=torch.float32)
         return target_ir * window
 
     def rfft_loss(self, prediction, target):
