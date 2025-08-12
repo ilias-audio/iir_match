@@ -14,6 +14,7 @@ class MatchEQ():
         self.set_number_of_delays(parameters["NUM_OF_DELAYS"])
         self.set_number_of_iterations(parameters["NUM_OF_ITER"])
         self.num_of_bands = parameters["NUM_OF_BANDS"]
+        self.set_batch_size(parameters["BATCH_SIZE"])
 
         self.default_parameters()
         self.set_training_parameters()
@@ -23,9 +24,10 @@ class MatchEQ():
         self.dataset_freqs = torch.tensor(dataset.freqs, device=self.device, dtype=torch.float32)
         self.dataset = torch.tensor(dataset.dataset, dtype=torch.float32)
         self.convert_dataset_rt_to_responses(dataset)
-
-
-    
+        # Create the DataLoader with a batch size of your choice
+        responses_tensor_dataset = torch.utils.data.TensorDataset(self.responses_dataset.unsqueeze(-1))
+        self.dataloader = torch.utils.data.DataLoader(responses_tensor_dataset, batch_size=self.batch_size,shuffle=True)
+   
     def default_parameters(self):
         self.set_min_delay_in_seconds(0.003)
         self.set_max_delay_in_seconds(0.1)
@@ -33,7 +35,6 @@ class MatchEQ():
         self.set_fixed_delays([4800])
         self.set_min_frequency(1.)
         self.set_max_frequency(20000.)
-        self.set_batch_size(4)
 
     def convert_dataset_rt_to_responses(self, dataset: Dataset.Dataset):
         self.median_response = ((-60 * self.delays.cpu()) / (self.sample_rate * dataset.median_rt))
@@ -70,20 +71,7 @@ class MatchEQ():
         return q_denormalize(q_params)
 
 
-    # Methods for frequencies
-    def set_max_frequency(self, freq : float):
-        self._max_frequency = freq
 
-    @property
-    def min_freq(self):
-        return self._min_frequency
-
-    @property
-    def max_freq(self):
-        return self._max_frequency
-
-    def set_min_frequency(self, freq : float):
-        self._min_frequency = freq
 
     def initial_training_frequencies(self):
         freq_values = torch.ones(self.num_of_bands, requires_grad=False, device=self.device, dtype=torch.float32)
@@ -121,19 +109,15 @@ class MatchEQ():
         return pred_responses
 
     
-    def curve_train(self, dataset_index: int):
-        pbar = tqdm(range(self.num_of_iter), desc=f"RT Index {dataset_index}")
+    def curve_train(self):
+        pbar = tqdm(range(self.dataloader), desc=f"Training Batches")
 
-        for n in pbar:
+        for batch in pbar:
             self.optimizer.zero_grad()
 
             pred_response = self.calculate_predicted_response()
             pred_response_dB = 20. * torch.log10(pred_response)
-            # print("---")
-            # print(pred_response_dB.shape)
-            # print(self.responses_dataset[dataset_index, :, :].shape)
-            # print("---")
-            # loss = self.loss_function(self.dataset[:, dataset_index], convert_response_to_rt(pred_response_dB, self.delays, self.sample_rate).squeeze())
+  
             loss = self.loss_function(self.responses_dataset[dataset_index, :], pred_response_dB)
 
             loss.backward()
@@ -308,6 +292,21 @@ class MatchEQ():
 
     def set_number_of_iterations(self, num_of_iter):
         self._num_of_iter = num_of_iter
+
+        # Methods for frequencies
+    def set_max_frequency(self, freq : float):
+        self._max_frequency = freq
+
+    def set_min_frequency(self, freq : float):
+        self._min_frequency = freq
+    
+    @property
+    def min_freq(self):
+        return self._min_frequency
+
+    @property
+    def max_freq(self):
+        return self._max_frequency
 
     @property
     def num_of_delays(self):

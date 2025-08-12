@@ -9,8 +9,6 @@ class Dataset:
     self.interpolate_dataset(interpolation_size) # Create values between 1 and 20kHz, with interpolation_size number of bands
     self.compute_median_rt() # Median RT for each band in the raw dataset and the interpolated dataset
 
-    
-
   def import_rt_dataset(self, path: str):
     raw_dataset = scipy.io.loadmat(path)
     self._raw_dataset = np.array([raw_dataset["rt_"]]).squeeze()

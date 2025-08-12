@@ -1,13 +1,11 @@
 import torch
-import torchaudio
-from Dataloader import Dataloader
+from Dataset import Dataloader
 from utilities import *
 from Filters import evaluate_mag_response, evaluate_sos_response, RBJ_LowShelf, RBJ_Bell, RBJ_HighShelf
 from tqdm import tqdm
 from scipy import signal
 import auraloss
 import os
-import PrintUtilities
 
 class MatchFFT:
     def __init__(self, num_of_iter: int, num_of_bands: int, num_of_delays: int, sample_rate: int, fft_size: int, device: str):
@@ -21,6 +19,7 @@ class MatchFFT:
         self.min_delay_in_samples = int(self.min_delay_in_seconds * self.sample_rate)
         self.max_delay_in_samples = int(self.max_delay_in_seconds * self.sample_rate)
         self.num_of_iter = num_of_iter
+        
         # self.delays, _ = torch.sort(torch.randint(self.min_delay_in_samples, self.max_delay_in_samples, (self.num_of_delays, 1), device=self.device, dtype=torch.float32), dim=0)
         self.delays = torch.tensor(4800, device=self.device, dtype=torch.float32).repeat(self.num_of_delays, 1)
         assert self.delays.shape == (self.num_of_delays, 1), "Delays should be a column vector"
@@ -74,101 +73,10 @@ class MatchFFT:
         # Use ReduceLROnPlateau for better convergence
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, self.num_of_iter)
 
-    def train(self, target_x: torch.Tensor, input_signal: torch.Tensor):
-        pbar = tqdm(range(self.num_of_iter), desc=f"Match FFT")
-        best_loss = float('inf')
-        patience_counter = 0
-
-        for n in pbar:
-            self.optimizer.zero_grad()
-
-            prediction_x = self.forward(input_signal)
-         
-            target_x = target_x.unsqueeze(0)
-            prediction_x = prediction_x.unsqueeze(0).unsqueeze(0)
-            # print(target_x.shape)
-            # print(prediction_x.shape)
-            # stft_loss = self.loss_function(prediction_x, target_x)
-            stft_loss = self.rfft_loss(prediction_x, target_x)
-            
-        
-            # time_loss = torch.nn.functional.mse_loss(target_x, prediction_x)
-            
-        
-            # target_mag = torch.abs(torch.stft(target_x, n_fft=1024, hop_length=256, window=torch.hann_window(1024, device=self.device), return_complex=True))
-            # pred_mag = torch.abs(torch.stft(prediction_x, n_fft=1024, hop_length=256, window=torch.hann_window(1024, device=self.device), return_complex=True))
-            # spectral_loss = torch.nn.functional.mse_loss(pred_mag.mean(dim=-1), target_mag.mean(dim=-1))
-            
-            # Combined loss
-            loss = (stft_loss)
-            
-            loss.backward()
-            
-            
-            # torch.nn.utils.clip_grad_norm_(self.parameters, max_norm=1.0)
-
-            self.optimizer.step()
-            self.scheduler.step()
-            
-            # Early stopping
-            if loss.item() < best_loss:
-                best_loss = loss.item()
-                patience_counter = 0
-            else:
-                patience_counter += 1
-                
-            if patience_counter > 1000:
-                print(f"Early stopping at iteration {n}")
-                break
-
-            pbar.set_postfix({
-                "loss": loss.item(), 
-                "lr": self.optimizer.param_groups[0]['lr']
-            })
-        
-        # print the trained parameters
-        print(f"Trained Frequencies: {self.eq_parameters_freqs.data}")
-        print(f"Trained Gains: {self.eq_parameters_gains.data}")
-        print(f"Trained Q: {self.eq_parameters_q.data}")
-        print(f"Trained Delays: {self.delays.data}")
+    
 
     
-    def forward(self, input_signal: torch.Tensor):
-        # Génération de la réponse en fréquence
-        self.eq_parameters_freqs = self.parameter_to_frequency()
-        self.eq_parameters_gains = self.parameter_to_gains()
-        self.eq_parameters_q     = self.parameter_to_q()
-
-        # print the trained parameters
-        print(f"Trained Frequencies: {self.eq_parameters_freqs.data}")
-        print(f"Trained Gains: {self.eq_parameters_gains.data}")
-        print(f"Trained Q: {self.eq_parameters_q.data}")
-        print(f"Trained Delays: {self.delays.data}")
-        
-        # Correction de la taille de fft_freqs
-        # La taille de la FFT pour le filtrage doit être suffisamment grande
-        n_fft_filter = len(input_signal.squeeze())
-        fft_freqs = torch.fft.fftfreq(n_fft_filter)[:n_fft_filter // 2 + 1] * self.sample_rate
-
-        # Assurez-vous que evaluate_mag_response est compatible
-        eq_mag_response_lin = evaluate_mag_response(fft_freqs, self.eq_parameters_freqs, self.eq_parameters_gains, self.eq_parameters_q)
-        
-        # Création de l'IR
-        # La taille de l'IR doit être 2*(longueur de la réponse en fréquence)-2
-        ir = torch.fft.fftshift(torch.fft.irfft(eq_mag_response_lin.T), dim = -1)
-        window = torch.hann_window(ir.size(-1), periodic=False, device=self.device, dtype=torch.float32).expand_as(ir)
-        ir = ir * window
-
-        # Le code de filtrage est correct
-        n_fft = len(input_signal.squeeze())
-        ir_fft_padded = torch.fft.fft(ir.squeeze(), n=n_fft)
-        prediction_freq_domain = torch.fft.fft(input_signal.squeeze(), n=n_fft)
-        prediction_freq_domain = prediction_freq_domain * ir_fft_padded
-
-        # Retour au domaine temporel
-        prediction = torch.real(torch.fft.ifft(prediction_freq_domain))
     
-        return prediction
 
     def parameter_to_frequency(self):
         freq_params = torch.sigmoid(self.parameters[0].unsqueeze(1).repeat(1, self.num_of_delays))
