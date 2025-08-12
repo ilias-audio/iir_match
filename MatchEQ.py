@@ -50,43 +50,7 @@ class MatchEQ():
         assert self.parameters[1].shape == torch.Size([self.num_of_bands]), f"Gain values should be a column vector, but got {self.parameters[1].shape}"
         assert self.parameters[2].shape == torch.Size([self.num_of_bands]), f"Q values should be a column vector, but got {self.parameters[2].shape}"
      
-    def setup_optimizer(self):
-        self.optimizer = torch.optim.Adam(self.parameters, lr=0.1)
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, self.num_of_iter)
-
-    def parameter_to_frequency(self):
-        freq_params = torch.sigmoid(self.parameters[0].unsqueeze(1).repeat(1, self.num_of_delays))
-        return frequency_denormalize(freq_params)
-
-    def parameter_to_gains(self):
-        gain_params = torch.sigmoid(self.parameters[1])
-        return convert_proto_gain_to_delay(gain_denormalize((gain_params)), self.delays, self.sample_rate)
-    
-    def parameter_to_q(self):
-        q_params = torch.sigmoid(self.parameters[2].unsqueeze(1).repeat(1, self.num_of_delays))
-        return q_denormalize(q_params)
-
-
-
-
-    def initial_training_frequencies(self):
-        freq_values = torch.ones(self.num_of_bands, requires_grad=False, device=self.device, dtype=torch.float32)
-        freq_values[1:-1] = torch.logspace(self.min_freq, self.max_freq, self.num_of_bands-2)
-        # Make the shelfs centered at 1000 Hz
-        freq_values[0] = 1000 
-        freq_values[-1] = 1000
-        # freq_values.requires_grad(True)
-        freq_values.requires_grad_(True)
-        return torch.special.logit(frequency_normalize(freq_values),eps=1e-6)
-
-    def initial_training_gains(self):
-        gain_values = 0.1 * torch.ones(self.num_of_bands, requires_grad=True, device=self.device, dtype=torch.float32)
-        return torch.special.logit(gain_normalize(gain_values),eps=1e-6)
-
-    def initial_training_q(self):
-        q_values =  0.7 * torch.ones(self.num_of_bands, requires_grad=True, device=self.device, dtype=torch.float32)
-        return torch.special.logit(q_normalize(q_values),eps=1e-6)
-    
+   
 
 
     def calculate_predicted_response(self):
@@ -148,6 +112,9 @@ class MatchEQ():
         ir_fft_padded = torch.fft.fft(target_ir.squeeze(), n=n_fft)
         prediction_freq_domain = torch.fft.fft(input_signal.squeeze(), n=n_fft)
         target_spectrum = prediction_freq_domain * ir_fft_padded
+
+        # Plot the target spectrum
+        self.plot_target_spectrum(target_spectrum, dataset_index,target_ir)
 
         target_signal = torch.real(torch.fft.ifft(target_spectrum))
 
@@ -211,6 +178,44 @@ class MatchEQ():
         print(f"Trained Gains: {self.eq_parameters_gains.data}")
         print(f"Trained Q: {self.eq_parameters_q.data}")
         print(f"Trained Delays: {self.delays.data}")
+
+    def plot_target_spectrum(self, target_spectrum, dataset_index: int, ir=None):
+        import matplotlib.pyplot as plt
+        target_spectrum_magnitude = torch.abs(target_spectrum) / 100
+        plt.figure(f"target_spectrum_{dataset_index}")
+        
+        freqs = torch.fft.fftfreq(len(target_spectrum_magnitude), d=1/self.sample_rate)[:len(target_spectrum_magnitude)//2 + 1]
+        
+        plt.semilogx(
+            abs(freqs), 
+            20 * torch.log10(target_spectrum_magnitude[:len(freqs)]).detach().cpu().numpy(), 
+            label='Target Spectrum'
+        )
+
+        plt.semilogx(
+            self.dataset_freqs.detach().cpu().numpy(),
+            self.responses_dataset[dataset_index, :].detach().cpu().numpy(),
+            'r:', label='Target Response (dB)'
+        )
+
+        # Plot IR frequency response if provided
+        if ir is not None:
+            ir_fft = torch.fft.fft(ir.squeeze())
+            ir_freqs = torch.fft.fftfreq(ir.numel(), d=1/self.sample_rate)
+            ir_mag_db = 20 * torch.log10(torch.abs(ir_fft) + 1e-12)
+            plt.semilogx(
+                ir_freqs.detach().cpu().numpy(),
+                ir_mag_db.detach().cpu().numpy(),
+                'g-', label='IR Frequency Response'
+            )
+        
+        plt.xlabel("Frequency (Hz)")
+        plt.ylabel("Magnitude (dB)")
+        plt.title(f"Target Spectrum - Dataset Index {dataset_index}")
+        plt.legend()
+        plt.grid()
+        plt.savefig(os.path.join("figures", f'target_spectrum_{dataset_index}.png'))
+        plt.close()
 
 
     def fig_match_after_training(self, target_response, dataset_index: int):
@@ -304,6 +309,45 @@ class MatchEQ():
         torch.save(pred_response_dB, os.path.join(folder_name, f"pred_response_{dataset_index}.pt"))
         torch.save(pred_rt, os.path.join(folder_name, f"pred_rt_{dataset_index}.pt"))
 
+
+
+    def setup_optimizer(self):
+        self.optimizer = torch.optim.Adam(self.parameters, lr=0.1)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, self.num_of_iter)
+
+    def parameter_to_frequency(self):
+        freq_params = torch.sigmoid(self.parameters[0].unsqueeze(1).repeat(1, self.num_of_delays))
+        return frequency_denormalize(freq_params)
+
+    def parameter_to_gains(self):
+        gain_params = torch.sigmoid(self.parameters[1])
+        return convert_proto_gain_to_delay(gain_denormalize((gain_params)), self.delays, self.sample_rate)
+    
+    def parameter_to_q(self):
+        q_params = torch.sigmoid(self.parameters[2].unsqueeze(1).repeat(1, self.num_of_delays))
+        return q_denormalize(q_params)
+
+
+
+
+    def initial_training_frequencies(self):
+        freq_values = torch.ones(self.num_of_bands, requires_grad=False, device=self.device, dtype=torch.float32)
+        freq_values[1:-1] = torch.logspace(self.min_freq, self.max_freq, self.num_of_bands-2)
+        # Make the shelfs centered at 1000 Hz
+        freq_values[0] = 1000 
+        freq_values[-1] = 1000
+        # freq_values.requires_grad(True)
+        freq_values.requires_grad_(True)
+        return torch.special.logit(frequency_normalize(freq_values),eps=1e-6)
+
+    def initial_training_gains(self):
+        gain_values = 0.1 * torch.ones(self.num_of_bands, requires_grad=True, device=self.device, dtype=torch.float32)
+        return torch.special.logit(gain_normalize(gain_values),eps=1e-6)
+
+    def initial_training_q(self):
+        q_values =  0.7 * torch.ones(self.num_of_bands, requires_grad=True, device=self.device, dtype=torch.float32)
+        return torch.special.logit(q_normalize(q_values),eps=1e-6)
+    
 
 
     # Methods for FFT

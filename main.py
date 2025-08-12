@@ -15,7 +15,7 @@ if __name__ == "__main__":
         "SAMPLE_RATE": 48000,
         "NUM_OF_DELAYS": 1,
         "NUM_OF_BANDS": 4,
-        "NUM_OF_ITER": 6000,
+        "NUM_OF_ITER": 1,
         "INTERPOLATION_SIZE": 512,
         "FFT_SIZE": 256,
         "NUM_OF_RT": 1, 
