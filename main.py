@@ -14,11 +14,12 @@ if __name__ == "__main__":
     parameters = {
         "SAMPLE_RATE": 48000,
         "NUM_OF_DELAYS": 1,
-        "NUM_OF_BANDS": 12,
-        "NUM_OF_ITER": 10,
+        "NUM_OF_BANDS": 4,
+        "NUM_OF_ITER": 6000,
         "INTERPOLATION_SIZE": 512,
         "FFT_SIZE": 256,
-        "NUM_OF_RT": 3, 
+        "NUM_OF_RT": 10, 
+        "BATCH_SIZE": 4,
         "DEVICE": "cpu"
     }
     ##########################################
@@ -33,18 +34,16 @@ if __name__ == "__main__":
     analyzer.fig_check_interp(0, dataset)
     analyzer.fig_check_median_rt(dataset)
 
-    solver = MatchEQ.MatchEQ(dataset, parameters)
-
-    solver.curve_train(0)
-    solver.curve_train(1)
-    solver.curve_train(2)
-
-
-    analyzer.compute_relative_error(4, dataset, parameters) # can change the number of eq bands in the check
-    analyzer.compute_relative_error(6, dataset, parameters) # can change the number of eq bands in the check
-    analyzer.compute_relative_error(8, dataset, parameters) # can change the number of eq bands in the check
-    analyzer.compute_relative_error(10, dataset, parameters) # can change the number of eq bands in the check
-    analyzer.compute_relative_error(12, dataset, parameters) # can change the number of eq bands in the check
+    bands = [4, 6, 8, 10, 12]
+    for num_of_bands in bands:
+        parameters["NUM_OF_BANDS"] = num_of_bands
+        solver = MatchEQ.MatchEQ(dataset, parameters)
+        solver.curve_train()
+        analyzer.compute_relative_error(num_of_bands, dataset, parameters) # can change the number of eq bands in the check
+    # analyzer.compute_relative_error(6, dataset, parameters) # can change the number of eq bands in the check
+    # analyzer.compute_relative_error(8, dataset, parameters) # can change the number of eq bands in the check
+    # analyzer.compute_relative_error(10, dataset, parameters) # can change the number of eq bands in the check
+    # analyzer.compute_relative_error(12, dataset, parameters) # can change the number of eq bands in the check
     # but doesn't change the picture name so overwrite figure 4 or figure 6.
     # I could just export the relative error measurments and then load them in a picture to create the final one
     # analyzer.generate_relative_error_figure()
