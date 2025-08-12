@@ -24,9 +24,6 @@ class MatchEQ():
         self.dataset_freqs = torch.tensor(dataset.freqs, device=self.device, dtype=torch.float32)
         self.dataset = torch.tensor(dataset.dataset, dtype=torch.float32)
         self.convert_dataset_rt_to_responses(dataset)
-        # Create the DataLoader with a batch size of your choice
-        responses_tensor_dataset = torch.utils.data.TensorDataset(self.responses_dataset.unsqueeze(-1))
-        self.dataloader = torch.utils.data.DataLoader(responses_tensor_dataset, batch_size=self.batch_size,shuffle=True)
    
     def default_parameters(self):
         self.set_min_delay_in_seconds(0.003)
@@ -38,7 +35,6 @@ class MatchEQ():
 
     def convert_dataset_rt_to_responses(self, dataset: Dataset.Dataset):
         self.median_response = ((-60 * self.delays.cpu()) / (self.sample_rate * dataset.median_rt))
-        
         self.responses_dataset = torch.zeros((dataset.num_of_rt, len(self.dataset_freqs), self.num_of_delays), device=self.device)
         for i in range(dataset.num_of_rt):
             self.responses_dataset[i,:,:] = ((-60 * self.delays.cpu()) / (self.sample_rate * dataset.dataset[:, i])).T
@@ -110,7 +106,7 @@ class MatchEQ():
 
     
     def curve_train(self, dataset_index: int):
-        pbar = tqdm(range(self.num_of_iter), desc=f"RT Index {dataset_index}")
+        pbar = tqdm(range(self.num_of_iter), desc=f"Curve Match RT{dataset_index}")
 
         for iter in pbar:
             self.optimizer.zero_grad()
@@ -135,23 +131,43 @@ class MatchEQ():
 
         self.save_trained_parameters(dataset_index)
 
+    def db_to_linear(self, db_tensor: torch.Tensor):
+        return torch.pow(10.0, db_tensor / 20.0)
 
-    def audio_train(self, target_x: torch.Tensor, input_signal: torch.Tensor):
-        pbar = tqdm(range(self.num_of_iter), desc=f"Match FFT")
+
+    def audio_train(self, dataset_index: int): #target_x: torch.Tensor, input_signal: torch.Tensor):
+        # Get the response for the given dataset index
+        target_response = self.responses_dataset[dataset_index, :] # it's dB
+        target_ir = self.turn_response_to_ir(self.db_to_linear(target_response))
+
+        ### Create a WGN Generator
+        input_signal = torch.randn((1, self.sample_rate), device=self.device)  # 2 seconds
+        input_signal /= input_signal.std()  # Normalize to unit variance for flat spectrum
+
+        n_fft = len(input_signal.squeeze())
+        ir_fft_padded = torch.fft.fft(target_ir.squeeze(), n=n_fft)
+        prediction_freq_domain = torch.fft.fft(input_signal.squeeze(), n=n_fft)
+        target_spectrum = prediction_freq_domain * ir_fft_padded
+
+        target_signal = torch.real(torch.fft.ifft(target_spectrum))
+
+
+
+
+        pbar = tqdm(range(self.num_of_iter), desc=f"FFT Match RT{dataset_index}")
         best_loss = float('inf')
         patience_counter = 0
 
         for n in pbar:
             self.optimizer.zero_grad()
 
-            prediction_x = self.forward(input_signal)
+            prediction_x = self.audio_forward(input_signal)
             
-            target_x = target_x.unsqueeze(0)
+            target_x = target_signal.unsqueeze(0)
             prediction_x = prediction_x.unsqueeze(0).unsqueeze(0)
-            # print(target_x.shape)
-            # print(prediction_x.shape)
-            # stft_loss = self.loss_function(prediction_x, target_x)
-            stft_loss = self.rfft_loss(prediction_x, target_x)
+            print(target_x.shape)
+            print(prediction_x.shape)
+            rfft_loss = self.rfft_loss(prediction_x, target_x)
             
         
             # time_loss = torch.nn.functional.mse_loss(target_x, prediction_x)
@@ -162,7 +178,7 @@ class MatchEQ():
             # spectral_loss = torch.nn.functional.mse_loss(pred_mag.mean(dim=-1), target_mag.mean(dim=-1))
             
             # Combined loss
-            loss = (stft_loss)
+            loss = (rfft_loss)
             
             loss.backward()
             
@@ -188,18 +204,51 @@ class MatchEQ():
                 "lr": self.optimizer.param_groups[0]['lr']
             })
         
-        # print the trained parameters
+        self.save_trained_parameters(dataset_index)
+        self.fig_match_after_training(target_response, dataset_index)
+
         print(f"Trained Frequencies: {self.eq_parameters_freqs.data}")
         print(f"Trained Gains: {self.eq_parameters_gains.data}")
         print(f"Trained Q: {self.eq_parameters_q.data}")
         print(f"Trained Delays: {self.delays.data}")
 
+
+    def fig_match_after_training(self, target_response, dataset_index: int):
+        import matplotlib.pyplot as plt
+        predicted_response = Filters.evaluate_mag_response(
+            self.dataset_freqs,     # Frequency vector
+            self.eq_parameters_freqs,     # Center frequencies (NUM_OF_DELAYS x NUM_OF_BANDS)
+            self.eq_parameters_gains,     # Gain values (NUM_OF_DELAYS x NUM_OF_BANDS)
+            self.eq_parameters_q      # Q values (NUM_OF_DELAYS x NUM_OF_BANDS)
+            )
         
+        plt.figure(f"match_dataset_index_{dataset_index}")
+        plt.semilogx(self.dataset_freqs, 20 * torch.log10(abs(predicted_response)).detach().numpy(), color='blue', linestyle='--', label='Predicted Response')
+        plt.semilogx(self.dataset_freqs, (target_response).detach().numpy(), color='red', linestyle='--', label='Target Response')
+        plt.xlabel("Frequency (Hz)")
+        plt.ylabel("Magnitude (dB)")
+        plt.legend()
+        plt.title(f"Match EQ - Dataset Index {dataset_index}")
+        plt.savefig(os.path.join("figures", f'match_dataset_index_{dataset_index}.png'))
+        plt.close()
+
+
+    def turn_response_to_ir(self, response: torch.Tensor):
+        # Create the IR from the response
+        target_ir = torch.fft.fftshift(torch.fft.irfft(response.squeeze()))
+        window = torch.hann_window(target_ir.size(-1), periodic=False, device=self.device, dtype=torch.float32).expand_as(target_ir)
+        return target_ir * window
+
+    def rfft_loss(self, prediction, target):
+        target_fft = torch.fft.rfft(target.squeeze())
+        pred_fft = torch.fft.rfft(prediction.squeeze())
+        freq_error = torch.mean(torch.abs(torch.abs(target_fft) - torch.abs(pred_fft)))
+        return freq_error
 
     def audio_forward(self, input_signal: torch.Tensor):
         # Génération de la réponse en fréquence
         self.eq_parameters_freqs = self.parameter_to_frequency()
-        self.eq_parameters_gains = self.parameter_to_gains()
+        self.eq_parameters_gains = self.parameter_to_gains().T
         self.eq_parameters_q     = self.parameter_to_q()
 
         # print the trained parameters
@@ -214,13 +263,15 @@ class MatchEQ():
         fft_freqs = torch.fft.fftfreq(n_fft_filter)[:n_fft_filter // 2 + 1] * self.sample_rate
 
         # Assurez-vous que evaluate_mag_response est compatible
-        eq_mag_response_lin = evaluate_mag_response(fft_freqs, self.eq_parameters_freqs, self.eq_parameters_gains, self.eq_parameters_q)
+        eq_mag_response_lin = Filters.evaluate_mag_response(fft_freqs, self.eq_parameters_freqs, self.eq_parameters_gains, self.eq_parameters_q)
         
+        ir = self.turn_response_to_ir(eq_mag_response_lin)
+
         # Création de l'IR
         # La taille de l'IR doit être 2*(longueur de la réponse en fréquence)-2
-        ir = torch.fft.fftshift(torch.fft.irfft(eq_mag_response_lin.T), dim = -1)
-        window = torch.hann_window(ir.size(-1), periodic=False, device=self.device, dtype=torch.float32).expand_as(ir)
-        ir = ir * window
+        # ir = torch.fft.fftshift(torch.fft.irfft(eq_mag_response_lin.T), dim = -1)
+        # window = torch.hann_window(ir.size(-1), periodic=False, device=self.device, dtype=torch.float32).expand_as(ir)
+        # ir = ir * window
 
         # Le code de filtrage est correct
         n_fft = len(input_signal.squeeze())

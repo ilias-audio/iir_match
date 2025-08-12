@@ -62,6 +62,10 @@ class Analyzer:
         plt.legend()
         plt.close()
 
+    def fig_check_target_signal_fft_spectrum(self):
+        pass
+
+
 
     def load_responses(self, number_of_eq_bands: int, parameters: dict):
         number_of_responses = parameters["NUM_OF_RT"]
