@@ -109,10 +109,10 @@ class MatchEQ():
         return pred_responses
 
     
-    def curve_train(self):
-        pbar = tqdm(range(self.dataloader), desc=f"Training Batches")
+    def curve_train(self, dataset_index: int):
+        pbar = tqdm(range(self.num_of_iter), desc=f"RT Index {dataset_index}")
 
-        for batch in pbar:
+        for iter in pbar:
             self.optimizer.zero_grad()
 
             pred_response = self.calculate_predicted_response()
