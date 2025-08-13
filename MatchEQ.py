@@ -106,8 +106,15 @@ class MatchEQ():
         
         # Get the response for the given dataset index
         target_response = self.responses_dataset[dataset_index, :] # it's dB
+
+        # convert from the logspace to linear fft space
+        target_time_length = len(input_signal.squeeze())
+        fft_freqs = torch.fft.fftfreq(target_time_length, d=1/self.sample_rate)[:target_time_length // 2 + 1]
+        import numpy as np
+        linspace_response = torch.tensor(np.interp(fft_freqs, self.dataset_freqs.detach().cpu().numpy(), target_response.detach().cpu().numpy().squeeze()), device=self.device, dtype=torch.float32)
+        
         # Use a reasonable IR length for audio processing (e.g., 2048 samples)
-        target_ir = self.turn_response_to_ir(self.db_to_linear(target_response), target_length=len(input_signal))
+        target_ir = self.turn_response_to_ir(self.dataset_freqs, self.db_to_linear(linspace_response), target_time_length=target_time_length)
 
        
 
@@ -135,20 +142,18 @@ class MatchEQ():
             
             target_x = target_signal.unsqueeze(0)
             prediction_x = prediction_x.unsqueeze(0).unsqueeze(0)
-            print(target_x.shape)
-            print(prediction_x.shape)
             rfft_loss = self.rfft_loss(prediction_x, target_x)
             
         
             # time_loss = torch.nn.functional.mse_loss(target_x, prediction_x)
             
         
-            # target_mag = torch.abs(torch.stft(target_x, n_fft=1024, hop_length=256, window=torch.hann_window(1024, device=self.device), return_complex=True))
-            # pred_mag = torch.abs(torch.stft(prediction_x, n_fft=1024, hop_length=256, window=torch.hann_window(1024, device=self.device), return_complex=True))
-            # spectral_loss = torch.nn.functional.mse_loss(pred_mag.mean(dim=-1), target_mag.mean(dim=-1))
+            target_mag = torch.abs(torch.stft(target_x.squeeze(), n_fft=1024, hop_length=512, window=torch.hann_window(1024, device=self.device), return_complex=True))
+            pred_mag = torch.abs(torch.stft(prediction_x.squeeze(), n_fft=1024, hop_length=512, window=torch.hann_window(1024, device=self.device), return_complex=True))
+            spectral_loss = torch.nn.functional.mse_loss(pred_mag.mean(dim=-1), target_mag.mean(dim=-1))
             
             # Combined loss
-            loss = (rfft_loss)
+            loss = (spectral_loss)
             
             loss.backward()
             
@@ -241,13 +246,9 @@ class MatchEQ():
         plt.close()
 
 
-    def turn_response_to_ir(self, response: torch.Tensor, target_length: int = None):
-        """
-        Convert a frequency response to an impulse response.
-        Since target_length will match input signal length, use response directly.
-        """
-        # Create IR from response directly (assuming it's already the right length for rfft)
-        target_ir = torch.fft.irfft(response.squeeze())
+    def turn_response_to_ir(self, freqs: torch.Tensor, response: torch.Tensor, target_time_length: int, require_grad: bool = False):
+
+        target_ir = torch.fft.fftshift(torch.fft.irfft(response.squeeze()))
         window = torch.hann_window(target_ir.size(-1), periodic=False, device=self.device, dtype=torch.float32)
         return target_ir * window
 
@@ -264,10 +265,10 @@ class MatchEQ():
         self.eq_parameters_q     = self.parameter_to_q()
 
         # print the trained parameters
-        print(f"Trained Frequencies: {self.eq_parameters_freqs.data}")
-        print(f"Trained Gains: {self.eq_parameters_gains.data}")
-        print(f"Trained Q: {self.eq_parameters_q.data}")
-        print(f"Trained Delays: {self.delays.data}")
+        # print(f"Trained Frequencies: {self.eq_parameters_freqs.data}")
+        # print(f"Trained Gains: {self.eq_parameters_gains.data}")
+        # print(f"Trained Q: {self.eq_parameters_q.data}")
+        # print(f"Trained Delays: {self.delays.data}")
         
         # Correction de la taille de fft_freqs
         # La taille de la FFT pour le filtrage doit être suffisamment grande
@@ -275,9 +276,10 @@ class MatchEQ():
         fft_freqs = torch.fft.fftfreq(n_fft_filter)[:n_fft_filter // 2 + 1] * self.sample_rate
 
         # Assurez-vous que evaluate_mag_response est compatible
+        fft_freqs = fft_freqs.to(self.device).detach().clone().requires_grad_(True)
         eq_mag_response_lin = Filters.evaluate_mag_response(fft_freqs, self.eq_parameters_freqs, self.eq_parameters_gains, self.eq_parameters_q)
         
-        ir = self.turn_response_to_ir(eq_mag_response_lin)
+        ir = self.turn_response_to_ir(fft_freqs, eq_mag_response_lin, n_fft_filter, require_grad=True)
 
         # Création de l'IR
         # La taille de l'IR doit être 2*(longueur de la réponse en fréquence)-2

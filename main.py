@@ -15,7 +15,7 @@ if __name__ == "__main__":
         "SAMPLE_RATE": 48000,
         "NUM_OF_DELAYS": 1,
         "NUM_OF_BANDS": 4,
-        "NUM_OF_ITER": 1,
+        "NUM_OF_ITER": 6000,
         "INTERPOLATION_SIZE": 512,
         "FFT_SIZE": 256,
         "NUM_OF_RT": 1, 
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     analyzer.fig_check_median_rt(dataset)
 
     # bands = [4, 6, 8, 10, 12]
-    bands = [10]
+    bands = [6]
     for num_of_bands in bands:
         parameters["NUM_OF_BANDS"] = num_of_bands
         for i in range(parameters["NUM_OF_RT"]):
