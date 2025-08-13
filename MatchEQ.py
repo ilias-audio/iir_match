@@ -30,8 +30,8 @@ class MatchEQ():
         self.set_max_delay_in_seconds(0.1)
         # self.set_random_delays()
         self.set_fixed_delays([4800])
-        self.set_min_frequency(1.)
-        self.set_max_frequency(20000.)
+        self.set_min_frequency(20.)
+        self.set_max_frequency(16000.)
 
     def convert_dataset_rt_to_responses(self, dataset: Dataset.Dataset):
         self.median_response = ((-60 * self.delays.cpu()) / (self.sample_rate * dataset.median_rt))
@@ -94,6 +94,7 @@ class MatchEQ():
         print(f"Trained Delays: {self.delays.data}")
 
         self.save_trained_parameters(dataset_index)
+        self.fig_match_after_training(self.responses_dataset[dataset_index, :], dataset_index)
 
     def db_to_linear(self, db_tensor: torch.Tensor):
         return torch.pow(10.0, db_tensor / 20.0)
@@ -120,8 +121,8 @@ class MatchEQ():
 
         n_fft = len(input_signal.squeeze())
         ir_fft_padded = torch.fft.fft(target_ir.squeeze(), n=n_fft)
-        prediction_freq_domain = torch.fft.fft(input_signal.squeeze(), n=n_fft)
-        target_spectrum = prediction_freq_domain * ir_fft_padded
+        input_freq_domain = torch.fft.fft(input_signal.squeeze(), n=n_fft)
+        target_spectrum = input_freq_domain * ir_fft_padded
 
         # Plot the target spectrum
         self.plot_target_spectrum(target_spectrum, dataset_index,target_ir)
@@ -142,16 +143,26 @@ class MatchEQ():
             
             target_x = target_signal.unsqueeze(0)
             prediction_x = prediction_x.unsqueeze(0).unsqueeze(0)
-            rfft_loss = self.rfft_loss(prediction_x, target_x)
+            # rfft_loss = self.rfft_loss(prediction_x, target_x)
             
         
             # time_loss = torch.nn.functional.mse_loss(target_x, prediction_x)
             
         
-            target_mag = torch.abs(torch.stft(target_x.squeeze(), n_fft=1024, hop_length=512, window=torch.hann_window(1024, device=self.device), return_complex=True))
-            pred_mag = torch.abs(torch.stft(prediction_x.squeeze(), n_fft=1024, hop_length=512, window=torch.hann_window(1024, device=self.device), return_complex=True))
-            spectral_loss = torch.nn.functional.mse_loss(pred_mag.mean(dim=-1), target_mag.mean(dim=-1))
-            
+            # target_mag = torch.abs(torch.stft(target_x.squeeze(), n_fft=256, hop_length=64, window=torch.hann_window(256, device=self.device), return_complex=True))
+            # pred_mag = torch.abs(torch.stft(prediction_x.squeeze(), n_fft=256, hop_length=64, window=torch.hann_window(256, device=self.device), return_complex=True))
+            # spectral_loss = torch.nn.functional.mse_loss(pred_mag.mean(dim=-1), target_mag.mean(dim=-1))
+
+            pred_stft = torch.stft(prediction_x.squeeze(), n_fft=self.fft_size, hop_length=self.fft_size //2, window=torch.hann_window(self.fft_size, device=self.device), return_complex=True)
+            target_stft = torch.stft(target_x.squeeze(), n_fft=self.fft_size, hop_length=self.fft_size //2, window=torch.hann_window(self.fft_size, device=self.device), return_complex=True)
+
+            pred_long_term_spectrum = pred_stft.abs().mean(dim=-1).squeeze()
+            target_long_term_spectrum = target_stft.abs().mean(dim=-1).squeeze()
+
+            # Compute the spectral loss
+            spectral_loss = torch.nn.functional.mse_loss(pred_long_term_spectrum, target_long_term_spectrum)
+
+
             # Combined loss
             loss = (spectral_loss)
             
@@ -186,6 +197,25 @@ class MatchEQ():
         print(f"Trained Gains: {self.eq_parameters_gains.data}")
         print(f"Trained Q: {self.eq_parameters_q.data}")
         print(f"Trained Delays: {self.delays.data}")
+
+    def plot_in_training_spectrum(self, dataset_index: int, step: int):
+        import matplotlib.pyplot as plt
+        predicted_response = Filters.evaluate_mag_response(
+            self.dataset_freqs,     # Frequency vector
+            self.eq_parameters_freqs,     # Center frequencies (NUM_OF_DELAYS x NUM_OF_BANDS)
+            self.eq_parameters_gains,     # Gain values (NUM_OF_DELAYS x NUM_OF_BANDS)
+            self.eq_parameters_q      # Q values (NUM_OF_DELAYS x NUM_OF_BANDS)
+            )
+        
+        plt.figure(f"match_dataset_index_{dataset_index}")
+        plt.semilogx(self.dataset_freqs, 20 * torch.log10(abs(predicted_response)).detach().numpy(), color='blue', linestyle='--', label='Predicted Response')
+        plt.semilogx(self.dataset_freqs, (self.responses_dataset[dataset_index, :]).detach().numpy(), color='red', linestyle='--', label='Target Response')
+        plt.xlabel("Frequency (Hz)")
+        plt.ylabel("Magnitude (dB)")
+        plt.legend()
+        plt.title(f"Match EQ - Dataset Index {dataset_index}")
+        plt.savefig(os.path.join("figures", f'match_step{step}_index_{dataset_index}.png'))
+        plt.close()
 
     def plot_target_spectrum(self, target_spectrum, dataset_index: int, ir=None):
         import matplotlib.pyplot as plt
@@ -255,7 +285,7 @@ class MatchEQ():
     def rfft_loss(self, prediction, target):
         target_fft = torch.fft.rfft(target.squeeze())
         pred_fft = torch.fft.rfft(prediction.squeeze())
-        freq_error = torch.mean(torch.abs(torch.abs(target_fft) - torch.abs(pred_fft)))
+        freq_error = torch.nn.functional.mse_loss(torch.abs(target_fft), torch.abs(pred_fft))
         return freq_error
 
     def audio_forward(self, input_signal: torch.Tensor):
@@ -321,7 +351,7 @@ class MatchEQ():
 
 
     def setup_optimizer(self):
-        self.optimizer = torch.optim.Adam(self.parameters, lr=0.1)
+        self.optimizer = torch.optim.Adam(self.parameters, lr=0.06)
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, self.num_of_iter)
 
     def parameter_to_frequency(self):
@@ -341,7 +371,7 @@ class MatchEQ():
 
     def initial_training_frequencies(self):
         freq_values = torch.ones(self.num_of_bands, requires_grad=False, device=self.device, dtype=torch.float32)
-        freq_values[1:-1] = torch.logspace(self.min_freq, self.max_freq, self.num_of_bands-2)
+        freq_values[1:-1] = torch.logspace(torch.log10(torch.tensor(self.min_freq)), torch.log10(torch.tensor(self.max_freq)), self.num_of_bands-2)
         # Make the shelfs centered at 1000 Hz
         freq_values[0] = 1000 
         freq_values[-1] = 1000

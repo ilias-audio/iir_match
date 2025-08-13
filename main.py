@@ -17,7 +17,7 @@ if __name__ == "__main__":
         "NUM_OF_BANDS": 4,
         "NUM_OF_ITER": 6000,
         "INTERPOLATION_SIZE": 512,
-        "FFT_SIZE": 256,
+        "FFT_SIZE": 2**12,
         "NUM_OF_RT": 1, 
         "BATCH_SIZE": 4,
         "DEVICE": "cpu"
