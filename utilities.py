@@ -12,7 +12,7 @@ def log_denormalize(value, min, max):
   return value
 
 def lin_normalize(value, min, max):
-  value = ((value) * (max - min)) + min
+  value = (value - min) / (max - min)
   return value
 
 def lin_denormalize(value, min, max):
@@ -62,8 +62,24 @@ def q_normalize(q):
 
 def convert_proto_gain_to_delay(gamma, delays, fs):
   gain_dB = gamma * (delays / fs)
-  return gain_dB.T
+  return gain_dB
 
 def convert_response_to_rt(response_dB, delay, sample_rate):
   rt = (-60 * delay) / (sample_rate * response_dB)
   return rt
+
+def check_parameter_bounds(freq, gain, q, name=""):
+    """Debug utility to check if parameters are in reasonable ranges"""
+    print(f"=== {name} Parameter Check ===")
+    print(f"Frequencies: min={freq.min().item():.1f}, max={freq.max().item():.1f}, mean={freq.mean().item():.1f}")
+    print(f"Gains: min={gain.min().item():.2f}, max={gain.max().item():.2f}, mean={gain.mean().item():.2f}")
+    print(f"Q values: min={q.min().item():.3f}, max={q.max().item():.3f}, mean={q.mean().item():.3f}")
+    
+    # Check for problematic values
+    if freq.min() < 20 or freq.max() > 20000:
+        print("WARNING: Frequencies outside audible range!")
+    if torch.abs(gain).max() > 24:
+        print("WARNING: Extreme gain values detected!")
+    if q.min() < 0.1 or q.max() > 10:
+        print("WARNING: Extreme Q values detected!")
+    print()

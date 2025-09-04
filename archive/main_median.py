@@ -1,6 +1,6 @@
 import os
-import Dataloader
-import MatchEQ
+import Dataset
+import MatchCurve
 import Analyzer
 import multiprocessing
 import concurrent.futures
@@ -23,13 +23,13 @@ if __name__ == "__main__":
 
     # Load dataset and interpolate data to a bigger size
     raw_dataset_path = os.path.join("data", "two-stage-RT-values.mat")
-    RT_dataset = Dataloader.Dataloader(raw_dataset_path, INTERPOLATION_SIZE)
+    RT_dataset = Dataset.Dataloader(raw_dataset_path, INTERPOLATION_SIZE)
 
     # print(RT_dataset.median_rt.shape)
     # print(RT_dataset.raw_median_rt)
 
     def train_median(number_of_bands :int):
-        EQ_Optimizer = MatchEQ.MatchEQ(RT_dataset, NUM_OF_ITER, number_of_bands, NUM_OF_DELAYS, SAMPLE_RATE, "cpu")
+        EQ_Optimizer = MatchCurve.MatchEQ(RT_dataset, NUM_OF_ITER, number_of_bands, NUM_OF_DELAYS, SAMPLE_RATE, "cpu")
         EQ_Optimizer.train_median()
         EQ_Optimizer.plot_median_results()
         EQ_Optimizer.save_median_parameters()
